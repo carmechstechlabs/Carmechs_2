@@ -43,7 +43,7 @@ export default function Navbar() {
       }`}
     >
       <div className="container mx-auto px-4 md:px-8 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 group">
+        <Link to="/" className="flex items-center gap-3 group" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
           {config.logoUrl ? (
             <img 
               src={config.logoUrl} 
@@ -84,6 +84,17 @@ export default function Navbar() {
               <a
                 key={link.name}
                 href={link.href}
+                onClick={(e) => {
+                   if (link.href.startsWith('#')) {
+                     e.preventDefault();
+                     const target = document.querySelector(link.href);
+                     if (target) {
+                       const offset = 100; // Account for fixed header
+                       const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
+                       window.scrollTo({ top, behavior: 'smooth' });
+                     }
+                   }
+                }}
                 className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-500 hover:text-primary hover:bg-white transition-all"
               >
                 {link.name}

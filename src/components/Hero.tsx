@@ -68,9 +68,9 @@ export default function Hero() {
                   }}
                   className="bg-primary text-white h-[74px] px-12 rounded-3xl font-black text-sm uppercase tracking-[0.2em] flex items-center justify-center gap-4 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/40 group relative overflow-hidden"
                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                  <Play size={20} fill="currentColor" />
-                  Initiate Booking
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                  <Play size={20} fill="currentColor" className="group-hover:rotate-[360deg] transition-transform duration-700" />
+                  BOOK NOW
                   <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
                </motion.button>
                

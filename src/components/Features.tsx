@@ -45,8 +45,9 @@ export default function Features() {
       <div className="container mx-auto px-4 md:px-8">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-24 gap-12">
           <div className="max-w-2xl">
-            <div className="inline-block bg-primary-soft text-primary px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-6">
-               Why You'll Love Us
+            <div className="flex items-center gap-2 bg-primary/10 text-primary px-5 py-2.5 rounded-full mb-8 border border-primary/20 shadow-lg shadow-primary/5 group transition-all hover:bg-primary hover:text-white cursor-help">
+              <BadgeCheck size={18} className="animate-bounce" />
+              <span className="text-xs font-black uppercase tracking-[0.3em]">Why Choose Us</span>
             </div>
             <h3 className="text-6xl md:text-8xl font-black text-ink leading-[1] mb-8 font-display tracking-tight">
               TOP GEAR <br /> 

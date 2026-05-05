@@ -406,6 +406,7 @@ export default function AdminDashboard() {
     { id: "customers", name: "Customers", icon: Users },
     { id: "locations", name: "Location Control", icon: Globe },
     { id: "inquiries", name: "Support Inquiries", icon: MessageSquare },
+    { id: "integrations", name: "API Integrations", icon: Zap },
     { id: "settings", name: "Settings", icon: Settings },
   ];
 
@@ -582,9 +583,7 @@ export default function AdminDashboard() {
             { activeTab === "testimonials" && <TestimonialsTab /> }
             { activeTab === "referrals" && <ReferralsTab /> }
             { activeTab === "locations" && <LocationsTab /> }
-            { activeTab === "layout" && <LayoutTab /> }
-            { activeTab === "system" && <SystemTab /> }
-            { activeTab === "seo" && <SEOTab /> }
+            { activeTab === "integrations" && <IntegrationsTab /> }
             { activeTab === "customers" && <CustomersTab /> }
             { activeTab === "marketing" && <MarketingTab /> }
             { activeTab === "settings" && <SettingsTab user={user} /> }
@@ -598,12 +597,25 @@ export default function AdminDashboard() {
 function OverviewTab({ bookings, onTabChange }: { bookings: any[], onTabChange: (tab: string) => void }) {
   const stats = [
     { name: "Total Engagement", value: bookings.length.toString(), icon: Users, color: "text-blue-500", trend: "+12.5%" },
-    { name: "Live Operations", value: bookings.filter(b => b.status === "in-progress").length.toString(), icon: Zap, color: "text-yellow-500", trend: "+5.2%" },
+    { name: "Live Operations", value: bookings.filter(b => b.status === "in-progress" || b.status === "confirmed").length.toString(), icon: Zap, color: "text-yellow-500", trend: "+5.2%" },
     { name: "Target Efficiency", value: "94.2%", icon: Gauge, color: "text-emerald-500", trend: "+0.8%" },
-    { name: "Monthly Revenue", value: `₹${(bookings.length * 1500).toLocaleString()}`, icon: TrendingUp, color: "text-rose-500", trend: "+24.1%" },
+    { name: "Monthly Revenue", value: `₹${bookings.reduce((acc, b) => acc + (b.price || 0), 0).toLocaleString()}`, icon: TrendingUp, color: "text-rose-500", trend: "+24.1%" },
   ];
 
   const recentBookings = bookings.slice(0, 6);
+
+  // Calculate real chart data
+  const chartData = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const dateStr = d.toISOString().split('T')[0];
+    const dayBookings = bookings.filter(b => b.createdAt?.toDate?.().toISOString().split('T')[0] === dateStr);
+    return {
+      name: d.toLocaleDateString('en-US', { weekday: 'short' }),
+      revenue: dayBookings.reduce((acc, b) => acc + (b.price || 0), 0),
+      missions: dayBookings.length
+    };
+  });
 
   return (
     <div className="space-y-10 max-w-[1600px] mx-auto pb-20">
@@ -658,11 +670,7 @@ function OverviewTab({ bookings, onTabChange }: { bookings: any[], onTabChange: 
         <div className="h-[400px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={Array.from({ length: 7 }).map((_, i) => ({
-                name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
-                revenue: Math.floor(Math.random() * 5000) + 2000,
-                missions: Math.floor(Math.random() * 20) + 5
-              }))}
+              data={chartData}
               margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
             >
               <defs>
@@ -885,14 +893,26 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
       if (serviceType) updatePayload.serviceType = serviceType;
 
       await updateDoc(doc(db, "bookings", id), updatePayload);
-
-      // Trigger Server-Side Notification on Approval (Confirmed)
-      if (newStatus === "confirmed" && email) {
+      
+      // Trigger Server-Side Notification on Status Change
+      if (email) {
         try {
-          const { sendConfirmationEmail } = await import("../lib/mail");
-          await sendConfirmationEmail(email, fullName || "Customer", id);
+          await fetch("/api/notify/booking-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: email,
+              fullName: fullName || "Customer",
+              bookingId: id,
+              status: newStatus,
+              carModel: carModel || "Vehicle Node",
+              serviceType: serviceType || "Maintenance Operation",
+              date: appointmentDate || "TBA",
+              time: appointmentTime || "TBA"
+            })
+          });
         } catch (e) {
-          console.warn("Admin Notification trigger failed:", e);
+          console.warn("Status Notification trigger failed:", e);
         }
       }
       
@@ -1070,16 +1090,26 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                       </div>
                     </td>
                     <td className="px-6 py-5">
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest inline-block shadow-lg",
-                        booking.status === "in-progress" && "bg-blue-600/20 text-blue-400 border border-blue-600/30",
-                        booking.status === "pending" && "bg-yellow-600/20 text-yellow-500 border border-yellow-600/30",
-                        booking.status === "confirmed" && "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30",
-                        booking.status === "completed" && "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30",
-                        booking.status === "cancelled" && "bg-rose-600/20 text-rose-400 border border-rose-600/30",
-                      )}>
-                        {booking.status}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <select 
+                          value={booking.status}
+                          onChange={(e) => handleStatusUpdate(booking.id, e.target.value, booking.email, booking.fullName, booking.carModel, booking.serviceType, booking.appointmentDate, booking.appointmentTime)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none border-2 transition-all cursor-pointer",
+                            booking.status === "in-progress" && "bg-blue-600/20 text-blue-400 border-blue-600/30 hover:border-blue-500",
+                            booking.status === "pending" && "bg-yellow-600/20 text-yellow-500 border-yellow-600/30 hover:border-yellow-500",
+                            booking.status === "confirmed" && "bg-emerald-600/20 text-emerald-400 border-emerald-600/30 hover:border-emerald-500",
+                            booking.status === "completed" && "bg-emerald-600/20 text-emerald-400 border-emerald-600/30 hover:border-emerald-500",
+                            booking.status === "cancelled" && "bg-rose-600/20 text-rose-400 border-rose-600/30 hover:border-rose-500",
+                          )}
+                        >
+                          <option value="pending">PENDING</option>
+                          <option value="confirmed">CONFIRMED</option>
+                          <option value="in-progress">IN_PROGRESS</option>
+                          <option value="completed">COMPLETED</option>
+                          <option value="cancelled">CANCELLED</option>
+                        </select>
+                      </div>
                     </td>
                       <td className="px-6 py-5 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                         {booking.paymentStatus === 'paid' && (
@@ -1125,6 +1155,29 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                         >
                           <div className="space-y-6">
                             <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] flex items-center gap-2">
+                               <div className="w-3 h-[1px] bg-accent-red" />
+                               Selected Protocol (Cart)
+                            </h4>
+                            <div className="space-y-3">
+                              {booking.cart && Array.isArray(booking.cart) ? (
+                                booking.cart.map((item: any, i: number) => (
+                                  <div key={i} className="flex justify-between items-center bg-white/5 border border-white/5 p-4 rounded-xl">
+                                    <div className="text-[10px] font-black text-white uppercase italic">{item.title}</div>
+                                    <div className="text-accent-red font-bold text-xs">₹{item.price}</div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest bg-white/5 border border-white/5 p-4 rounded-xl text-center">
+                                  {booking.serviceType} - ₹{booking.price}
+                                </div>
+                              )}
+                              <div className="flex justify-between items-center p-4 bg-primary/10 border border-primary/20 rounded-xl mt-4">
+                                <div className="text-[9px] font-black text-primary uppercase tracking-widest">Total Transaction Value</div>
+                                <div className="text-primary font-black text-sm italic">₹{booking.price}</div>
+                              </div>
+                            </div>
+                            
+                            <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] flex items-center gap-2 pt-4">
                                <div className="w-3 h-[1px] bg-accent-red" />
                                Identity Data
                             </h4>
@@ -1307,8 +1360,10 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
   );
 }
 
-function ServicesTab({ carData }: { carData: Record<string, { logo: string, models: { name: string, logo: string }[] }> }) {
+function ServicesTab({ carData }: { carData: Record<string, { logo: string, models: { name: string, logo: string, fuelTypes?: string[] }[] }> }) {
   const [services, setServices] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(["Periodic", "Engine", "AC", "Battery", "Brake", "Clutch", "Tyre", "Detailing", "Denting", "Maintenance", "Repair", "Electrical", "Bodywork", "Diagnostics"]);
+  const [newCategory, setNewCategory] = useState("");
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
@@ -1334,7 +1389,6 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
     variants: [] as { make: string, model: string, fuel: string, price: number, description?: string }[]
   });
 
-  const categories = ["Periodic", "Engine", "AC", "Battery", "Brake", "Clutch", "Tyre", "Detailing", "Denting", "Maintenance", "Repair", "Electrical", "Bodywork", "Diagnostics"];
   const availableIcons = Object.keys(ICON_MAP);
 
   useEffect(() => {
@@ -1349,8 +1403,32 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
       // Even if it fails (not admin), we stop loading
       setLoading(false);
     });
-    return () => unsub();
+
+    const unsubCats = onSnapshot(doc(db, "config", "services"), (snap) => {
+      if (snap.exists() && snap.data().categories) {
+        setCategories(snap.data().categories);
+      }
+    });
+
+    return () => {
+      unsub();
+      unsubCats();
+    };
   }, []);
+
+  const handleAddCategory = async () => {
+    if (!newCategory) return;
+    const updated = Array.from(new Set([...categories, newCategory]));
+    await setDoc(doc(db, "config", "services"), { categories: updated }, { merge: true });
+    setNewCategory("");
+    toast.success(`Category "${newCategory}" assimilated.`);
+  };
+
+  const removeCategory = async (cat: string) => {
+    const updated = categories.filter(c => c !== cat);
+    await setDoc(doc(db, "config", "services"), { categories: updated }, { merge: true });
+    toast.info(`Category "${cat}" purged.`);
+  };
 
   if (loading) return (
     <div className="space-y-10 max-w-[1600px] mx-auto pb-20">
@@ -1644,6 +1722,35 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                 </div>
               </div>
             </div>
+
+            <div className="bg-black/20 p-8 rounded-3xl border border-white/5 space-y-6">
+                <div>
+                   <h4 className="text-xs font-black text-white uppercase tracking-widest">Category Ecosystem</h4>
+                   <p className="text-[9px] font-bold text-text-dim uppercase tracking-[0.2em] mt-1">Manage dynamic service classification tags</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                   {categories.map(cat => (
+                      <div key={cat} className="group/cat flex items-center gap-2 bg-white/5 border border-white/5 px-4 py-2 rounded-xl hover:border-primary/50 transition-all">
+                         <span className="text-[10px] font-black text-white uppercase italic">{cat}</span>
+                         <button onClick={() => removeCategory(cat)} className="text-rose-500 opacity-0 group-hover/cat:opacity-100 hover:scale-125 transition-all">
+                            <X size={12} />
+                         </button>
+                      </div>
+                   ))}
+                   <div className="flex items-center gap-2 bg-white/5 px-2 rounded-xl border border-dashed border-white/10 focus-within:border-primary transition-all">
+                      <input 
+                        value={newCategory}
+                        onChange={e => setNewCategory(e.target.value)}
+                        placeholder="NEW CAT..."
+                        className="bg-transparent border-none text-[10px] font-black uppercase tracking-widest text-white px-3 py-1.5 outline-none w-24"
+                        onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                      />
+                      <button onClick={handleAddCategory} className="w-6 h-6 rounded-lg bg-primary/20 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all">
+                         <Plus size={14} />
+                      </button>
+                   </div>
+                </div>
+             </div>
             
             <div className="flex items-center gap-4">
               <div className="hidden xl:flex items-center gap-2 bg-black/40 border border-white/5 p-1 rounded-xl">
@@ -2139,22 +2246,28 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-3 py-3.5 bg-white/5 text-text-dim rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] border border-white/5 hover:bg-white/10 hover:text-white transition-all shadow-lg shadow-black/20"
+                    className="w-full flex items-center justify-center gap-3 py-3.5 bg-white/5 text-text-dim rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] border border-white/5 hover:bg-primary/20 hover:text-white transition-all shadow-lg shadow-black/20 group"
                   >
-                    <Upload size={14} />
-                    INITIALIZE UPLOAD
+                    <Upload size={14} className="group-hover:animate-bounce" />
+                    UPLOAD MASTER ASSET
                   </button>
                 </div>
-                <div className="w-28 h-28 bg-black/60 rounded-[2rem] border-2 border-white/5 flex items-center justify-center text-neutral-800 overflow-hidden shadow-2xl shrink-0 group relative group">
+                <div className="w-28 h-28 bg-black/60 rounded-[2rem] border-2 border-white/5 flex items-center justify-center text-neutral-800 overflow-hidden shadow-2xl shrink-0 group relative">
                   {newService.imageUrl ? (
                     <>
-                      <img src={newService.imageUrl} alt="" className="w-full h-full object-cover opacity-80 transition-opacity" referrerPolicy="no-referrer" />
-                      <div className="absolute inset-0 bg-accent-red/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all backdrop-blur-sm cursor-pointer" onClick={() => setNewService({ ...newService, imageUrl: "" })}>
-                        <X size={28} strokeWidth={3} />
+                      <img src={newService.imageUrl} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all" referrerPolicy="no-referrer" />
+                      <div 
+                        className="absolute inset-0 bg-rose-600/90 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all backdrop-blur-sm cursor-pointer" 
+                        onClick={() => setNewService({ ...newService, imageUrl: "" })}
+                      >
+                        <Trash2 size={24} strokeWidth={3} />
                       </div>
                     </>
                   ) : (
-                    <ImageIcon size={32} strokeWidth={1} />
+                    <div className="flex flex-col items-center gap-1 opacity-20">
+                      <ImageIcon size={32} strokeWidth={1} />
+                      <span className="text-[8px] font-black uppercase">No Media</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2245,23 +2358,40 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <label className="text-[9px] font-black text-text-dim uppercase tracking-widest ml-1 opacity-60">Brand Node</label>
-                              <input 
-                                type="text"
-                                value={v.make}
-                                onChange={(e) => updateVariant(idx, "make", e.target.value)}
-                                placeholder="e.g. Maruti"
-                                className="w-full text-[11px] font-black p-3 bg-black/40 border border-white/5 rounded-xl outline-none text-white focus:border-accent-red uppercase italic"
-                              />
+                              <div className="relative">
+                                <select 
+                                  value={v.make}
+                                  onChange={(e) => {
+                                    const make = e.target.value;
+                                    const defaultModel = (carData as any)[make]?.models?.[0]?.name || "All";
+                                    updateVariant(idx, "make", make);
+                                    updateVariant(idx, "model", defaultModel);
+                                  }}
+                                  className="w-full text-[11px] font-black p-3 bg-black/40 border border-white/5 rounded-xl outline-none text-white appearance-none uppercase"
+                                >
+                                  <option value="">SELECT MAKE</option>
+                                  <option value="All">All Brands</option>
+                                  {Object.keys(carData).map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                                <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim" />
+                              </div>
                             </div>
                             <div className="space-y-2">
                               <label className="text-[9px] font-black text-text-dim uppercase tracking-widest ml-1 opacity-60">Model Spec</label>
-                              <input 
-                                type="text"
-                                value={v.model}
-                                onChange={(e) => updateVariant(idx, "model", e.target.value)}
-                                placeholder="e.g. Swift"
-                                className="w-full text-[11px] font-black p-3 bg-black/40 border border-white/5 rounded-xl outline-none text-white focus:border-accent-red uppercase italic"
-                              />
+                              <div className="relative">
+                                <select 
+                                  value={v.model}
+                                  onChange={(e) => updateVariant(idx, "model", e.target.value)}
+                                  disabled={!v.make || v.make === "All"}
+                                  className="w-full text-[11px] font-black p-3 bg-black/40 border border-white/5 rounded-xl outline-none text-white appearance-none uppercase"
+                                >
+                                  <option value="All">All Models</option>
+                                  {v.make && (carData as any)[v.make]?.models?.map((mod: any) => (
+                                    <option key={mod.name} value={mod.name}>{mod.name}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim" />
+                              </div>
                             </div>
                           </div>
 
@@ -2274,6 +2404,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                                   onChange={(e) => updateVariant(idx, "fuel", e.target.value)}
                                   className="w-full text-[11px] font-black p-3 bg-black/40 border border-white/5 rounded-xl outline-none text-white focus:border-accent-red appearance-none uppercase"
                                 >
+                                  <option>All</option>
                                   <option>Petrol</option>
                                   <option>Diesel</option>
                                   <option>CNG</option>
@@ -2583,11 +2714,48 @@ function ContentTab() {
                 <div className="flex items-center gap-4">
                   <input 
                     type="range" min="14" max="22" step="1"
-                    value={config.baseFontSize}
+                    value={config.baseFontSize || 16}
                     onChange={(e) => setConfig({ ...config, baseFontSize: parseInt(e.target.value) })}
                     className="flex-1 accent-primary"
                   />
-                  <span className="text-xs font-mono font-black text-white">{config.baseFontSize}px</span>
+                  <span className="text-xs font-mono font-black text-white">{config.baseFontSize || 16}px</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] ml-1">Universal Font Color</label>
+                <div className="flex items-center gap-4 bg-black/40 p-2 rounded-2xl border border-white/10">
+                  <input 
+                    type="color" 
+                    value={config.fontColor || "#1e293b"}
+                    onChange={(e) => setConfig({ ...config, fontColor: e.target.value })}
+                    className="w-10 h-10 rounded-lg p-0 bg-transparent cursor-pointer border-none"
+                  />
+                  <input 
+                    type="text"
+                    value={config.fontColor || "#1e293b"}
+                    onChange={(e) => setConfig({ ...config, fontColor: e.target.value })}
+                    className="flex-1 bg-transparent text-[11px] font-mono font-black text-white uppercase outline-none"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] ml-1">Heading Font Color</label>
+                <div className="flex items-center gap-4 bg-black/40 p-2 rounded-2xl border border-white/10">
+                  <input 
+                    type="color" 
+                    value={config.headingColor || "#0f172a"}
+                    onChange={(e) => setConfig({ ...config, headingColor: e.target.value })}
+                    className="w-10 h-10 rounded-lg p-0 bg-transparent cursor-pointer border-none"
+                  />
+                  <input 
+                    type="text"
+                    value={config.headingColor || "#0f172a"}
+                    onChange={(e) => setConfig({ ...config, headingColor: e.target.value })}
+                    className="flex-1 bg-transparent text-[11px] font-mono font-black text-white uppercase outline-none"
+                  />
                 </div>
               </div>
             </div>
@@ -2754,7 +2922,7 @@ function ContentTab() {
 
 // Note: serverTimestamp is now imported from firebase/firestore
 
-function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: string, models: { name: string, logo: string }[] }>, setCarData: any }) {
+function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: string, models: { name: string, logo: string, fuelTypes?: string[] }[] }>, setCarData: any }) {
   const [newBrand, setNewBrand] = useState("");
   const [newBrandLogo, setNewBrandLogo] = useState("");
   const [newModel, setNewModel] = useState<{ [brand: string]: string }>({});
@@ -2848,7 +3016,7 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
     }
 
     await updateDoc(doc(db, "carBrands", brand), { 
-      models: [...models, { name: modelName, logo: "" }] 
+      models: [...models, { name: modelName, logo: "", fuelTypes: ["Petrol", "Diesel"] }] 
     });
     setNewModel({ ...newModel, [brand]: "" });
   };
@@ -2988,7 +3156,7 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
               </div>
 
               <div className="flex-1 space-y-2 mb-6 max-h-[220px] overflow-y-auto custom-scrollbar pr-1">
-                {(data.models || []).map((model, idx) => (
+                {(data.models || []).map((model: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between bg-black/20 px-4 py-2.5 rounded-xl group/model">
                     <div className="flex items-center gap-3">
                        <div className="relative group/modellogo">
@@ -3010,24 +3178,66 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
                           </button>
                        </div>
                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-tight">{model.name}</span>
+                       <div className="flex items-center gap-1.5 ml-2">
+                          {(model.fuelTypes || ["Petrol", "Diesel"]).map((f: string) => (
+                            <span key={f} className="text-[7px] font-black px-1.5 py-0.5 rounded-md bg-white/5 border border-white/5 text-neutral-500 uppercase tracking-tighter">
+                              {f.slice(0, 1)}
+                            </span>
+                          ))}
+                       </div>
                     </div>
                     <div className="flex items-center gap-2 opacity-0 group-hover/model:opacity-100 transition-all">
                        <button 
                          onClick={async () => {
-                           const newName = window.prompt(`Rename model "${model.name}" in ${brand}:`, model.name);
-                           if (newName && newName.trim() && newName !== model.name) {
+                           const currentFuels = model.fuelTypes || ["Petrol", "Diesel"];
+                           const commonFuels = ["Petrol", "Diesel", "Electric", "Hybrid", "CNG", "LPG"];
+                           const newFuelsStr = window.prompt(`Define fuel matrix for "${model.name}" in ${brand}. Comma separate types.\nSuggested: ${commonFuels.join(", ")}`, currentFuels.join(", "));
+                           
+                           if (newFuelsStr !== null) {
+                             const updatedFuels = newFuelsStr.split(",")
+                               .map(f => f.trim())
+                               .filter(f => f.length > 0)
+                               .map(f => f.charAt(0).toUpperCase() + f.slice(1).toLowerCase());
+                             
+                             if (updatedFuels.length === 0) {
+                               toast.error("Fuel protocol requires at least one type.");
+                               return;
+                             }
+
                              const updatedModels = [...carData[brand].models];
-                             updatedModels[idx].name = newName.trim();
-                             await updateDoc(doc(db, "carBrands", brand), { models: updatedModels });
+                             updatedModels[idx].fuelTypes = updatedFuels;
+                             
+                             try {
+                               await updateDoc(doc(db, "carBrands", brand), { models: updatedModels });
+                               toast.success(`Fuel matrix for ${model.name} synchronized.`);
+                             } catch (err) {
+                               console.error(err);
+                               toast.error("Registry update failed.");
+                             }
                            }
                          }}
-                         className="text-neutral-600 hover:text-white"
+                         className="text-neutral-600 hover:text-emerald-500 transition-all p-1"
+                         title="Calibrate Fuel Types"
+                       >
+                         <Fuel size={12} />
+                       </button>
+                       <button 
+                         onClick={async () => {
+                           const newName = window.prompt(`Rename model node "${model.name}" in branch ${brand}:`, model.name);
+                           if (newName && newName.trim() && newName !== model.name) {
+                             const updatedModels = [...carData[brand].models];
+                             updatedModels[idx].name = newName.trim().toUpperCase();
+                             await updateDoc(doc(db, "carBrands", brand), { models: updatedModels });
+                             toast.success("Identifier re-mapped.");
+                           }
+                         }}
+                         className="text-neutral-600 hover:text-white transition-all p-1"
                        >
                          <Edit2 size={10} />
                        </button>
                        <button 
                         onClick={() => handleDeleteModel(brand, idx)}
-                        className="text-neutral-600 hover:text-rose-500"
+                        className="text-neutral-600 hover:text-rose-500 transition-all p-1"
                        >
                          <X size={12} />
                        </button>
@@ -3086,6 +3296,7 @@ function TasksTab() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [sortBy, setSortBy] = useState("createdAt");
   const [showCreate, setShowCreate] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
   const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", dueDate: "" });
 
   useEffect(() => {
@@ -3104,18 +3315,39 @@ function TasksTab() {
     e.preventDefault();
     if (!newTask.title.trim()) return;
     try {
-      await addDoc(collection(db, "tasks"), {
-        ...newTask,
-        status: "pending",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      if (editingTask) {
+        await updateDoc(doc(db, "tasks", editingTask.id), {
+          ...newTask,
+          updatedAt: serverTimestamp()
+        });
+        toast.success("Task updated successfully.");
+      } else {
+        await addDoc(collection(db, "tasks"), {
+          ...newTask,
+          status: "pending",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        toast.success("Task created successfully.");
+      }
       setNewTask({ title: "", description: "", priority: "medium", dueDate: "" });
       setShowCreate(false);
+      setEditingTask(null);
     } catch (err) {
       console.error(err);
-      toast.error("System failure: Task creation protocol aborted.");
+      toast.error("System failure: Task protocol aborted.");
     }
+  };
+
+  const handleEdit = (task: any) => {
+    setEditingTask(task);
+    setNewTask({
+      title: task.title,
+      description: task.description || "",
+      priority: task.priority,
+      dueDate: task.dueDate || ""
+    });
+    setShowCreate(true);
   };
 
   const handleToggleComplete = async (id: string, currentStatus: string) => {
@@ -3398,7 +3630,13 @@ function TasksTab() {
                </div>
             </div>
 
-            <div className="flex items-center gap-4 pl-12 md:pl-0">
+            <div className="flex items-center gap-3 pl-12 md:pl-0">
+              <button 
+                onClick={() => handleEdit(task)}
+                className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-accent-red hover:border-accent-red transition-all opacity-0 group-hover:opacity-100"
+              >
+                <Edit2 size={16} />
+              </button>
               <button 
                 onClick={() => handleDeleteTask(task.id)}
                 className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-rose-500 hover:border-rose-500 transition-all opacity-0 group-hover:opacity-100"
@@ -4796,18 +5034,48 @@ function SEOTab() {
 
 function LocationsTab() {
   const [locations, setLocations] = useState<any[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [newCity, setNewCity] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [newLoc, setNewLoc] = useState({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    return onSnapshot(collection(db, "locations"), (snap) => {
+    const unsubLocs = onSnapshot(collection(db, "locations"), (snap) => {
       setLocations(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (err) => {
       console.warn("Locations sync error handled:", err.message);
     });
+
+    const unsubCities = onSnapshot(doc(db, "config", "cities"), (snap) => {
+      if (snap.exists()) {
+        setCities(snap.data().list || []);
+      } else {
+        // Seed default if missing
+        setDoc(doc(db, "config", "cities"), { list: ["Mumbai", "Delhi", "Bangalore"] });
+      }
+    });
+
+    return () => {
+      unsubLocs();
+      unsubCities();
+    };
   }, []);
+
+  const handleSaveCity = async () => {
+    if (!newCity) return;
+    const updated = [...cities, newCity];
+    await setDoc(doc(db, "config", "cities"), { list: updated });
+    setNewCity("");
+    toast.success(`${newCity} added to deployment matrix.`);
+  };
+
+  const removeCity = async (cityToRemove: string) => {
+    const updated = cities.filter(c => c !== cityToRemove);
+    await setDoc(doc(db, "config", "cities"), { list: updated });
+    toast.info(`${cityToRemove} decommissioned.`);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4960,6 +5228,40 @@ function LocationsTab() {
                 </div>
              </div>
           ))}
+       </div>
+
+       <div className="bg-card-bg p-10 rounded-[3.5rem] border border-border-subtle space-y-8 mt-12">
+          <div className="flex items-center justify-between border-b border-white/5 pb-6">
+             <div>
+                <h3 className="text-xl font-black text-white uppercase italic">Deployment City matrix</h3>
+                <p className="text-[9px] font-bold text-text-dim uppercase tracking-widest mt-1">Authorized territory units</p>
+             </div>
+          </div>
+          <div className="flex flex-wrap gap-4">
+             {cities.map(city => (
+                <div key={city} className="flex items-center gap-3 bg-black/40 border border-white/10 px-5 py-3 rounded-2xl group/city hover:border-primary/50 transition-all">
+                   <span className="text-sm font-black text-white uppercase italic tracking-tight">{city}</span>
+                   <button 
+                     onClick={() => removeCity(city)}
+                     className="text-rose-500 opacity-0 group-hover/city:opacity-100 hover:scale-125 transition-all"
+                   >
+                     <X size={14} />
+                   </button>
+                </div>
+             ))}
+             <div className="flex items-center gap-2 bg-white/5 px-2 rounded-2xl border border-dashed border-white/10 focus-within:border-primary transition-all">
+                <input 
+                  value={newCity}
+                  onChange={e => setNewCity(e.target.value)}
+                  placeholder="NEW CITY..."
+                  className="bg-transparent border-none text-xs font-black uppercase tracking-widest text-white px-3 py-2 outline-none w-32"
+                  onKeyDown={e => e.key === 'Enter' && handleSaveCity()}
+                />
+                <button onClick={handleSaveCity} className="w-8 h-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all">
+                   <Plus size={16} />
+                </button>
+             </div>
+          </div>
        </div>
     </div>
   );
@@ -5143,13 +5445,22 @@ function LayoutTab() {
   );
 }
 
-function SystemTab() {
+function IntegrationsTab() {
   const [config, setConfig] = useState({
     twilioSid: "",
     twilioToken: "",
     twilioPhone: "",
+    razorpayKeyId: "",
+    razorpayKeySecret: "",
+    paytmMid: "",
+    paytmKey: "",
     firebaseProjectId: "",
-    firebaseRegion: "",
+    firebaseApiKey: "",
+    firebaseAuthDomain: "",
+    firebaseStorageBucket: "",
+    firebaseMessagingSenderId: "",
+    firebaseAppId: "",
+    firebaseMeasurementId: "",
     enableAutoScaling: false
   });
   const [loading, setLoading] = useState(true);
@@ -5159,7 +5470,10 @@ function SystemTab() {
     async function loadConfig() {
       const snap = await getDoc(doc(db, "config", "system"));
       if (snap.exists()) {
-        setConfig(snap.data() as any);
+        setConfig({
+           ...config,
+           ...snap.data()
+        });
       }
       setLoading(false);
     }
@@ -5173,10 +5487,10 @@ function SystemTab() {
         ...config,
         updatedAt: serverTimestamp()
       });
-      toast.success("System configuration deployed successfully.");
+      toast.success("Ecosystem parameters synchronized.");
     } catch (err) {
       console.error(err);
-      toast.error("System deployment failed.");
+      toast.error("Synchronization failed.");
     } finally {
       setSaving(false);
     }
@@ -5195,20 +5509,21 @@ function SystemTab() {
   return (
     <div className="space-y-12 max-w-5xl pb-20">
        <div>
-          <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase">System <span className="text-secondary">Architecture</span></h2>
-          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">Manage API uplinks and core service credentials</p>
+          <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase">Integrated <span className="text-primary">Ecosystem</span></h2>
+          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">Manage API uplinks, payment gateways, and core service credentials</p>
        </div>
 
        <div className="grid md:grid-cols-2 gap-10">
+          {/* Twilio */}
           <div className="space-y-8 bg-card-bg p-10 rounded-[3rem] border border-border-subtle relative overflow-hidden group">
-             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opaciy">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-all">
                 <MessageSquare size={100} strokeWidth={1} />
              </div>
              <div className="flex items-center gap-4 border-b border-white/5 pb-6">
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500">
                    <MessageSquare size={24} />
                 </div>
-                <h3 className="text-xl font-black text-white uppercase italic">Twilio Gateway</h3>
+                <h3 className="text-xl font-black text-white uppercase italic">Twilio SMS</h3>
              </div>
              
              <div className="space-y-6 relative z-10">
@@ -5232,55 +5547,154 @@ function SystemTab() {
                       className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-primary outline-none"
                    />
                 </div>
+             </div>
+          </div>
+
+          {/* Razorpay */}
+          <div className="space-y-8 bg-card-bg p-10 rounded-[3rem] border border-border-subtle relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-all text-primary">
+                <Zap size={100} strokeWidth={1} />
+             </div>
+             <div className="flex items-center gap-4 border-b border-white/5 pb-6">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                   <Zap size={24} />
+                </div>
+                <h3 className="text-xl font-black text-white uppercase italic">Razorpay Payment</h3>
+             </div>
+             
+             <div className="space-y-6 relative z-10">
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Deployment Phone</label>
+                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Key ID</label>
                    <input 
                       type="text" 
-                      value={config.twilioPhone}
-                      onChange={e => setConfig({...config, twilioPhone: e.target.value})}
-                      placeholder="+1234567890"
+                      value={config.razorpayKeyId}
+                      onChange={e => setConfig({...config, razorpayKeyId: e.target.value})}
+                      placeholder="rzp_live_xxxxxxxxxxxx"
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-primary outline-none"
+                   />
+                </div>
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Key Secret</label>
+                   <input 
+                      type="password" 
+                      value={config.razorpayKeySecret}
+                      onChange={e => setConfig({...config, razorpayKeySecret: e.target.value})}
+                      placeholder="••••••••••••••••••••••••"
                       className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-primary outline-none"
                    />
                 </div>
              </div>
           </div>
 
+          {/* Paytm */}
           <div className="space-y-8 bg-card-bg p-10 rounded-[3rem] border border-border-subtle relative overflow-hidden group">
-             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opaciy">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-all text-blue-500">
                 <Shield size={100} strokeWidth={1} />
              </div>
              <div className="flex items-center gap-4 border-b border-white/5 pb-6">
-                <div className="w-12 h-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary">
+                <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500">
                    <Shield size={24} />
                 </div>
-                <h3 className="text-xl font-black text-white uppercase italic">Firebase Control</h3>
+                <h3 className="text-xl font-black text-white uppercase italic">Paytm Gateway</h3>
              </div>
              
              <div className="space-y-6 relative z-10">
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Project Identifier</label>
+                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Merchant ID (MID)</label>
                    <input 
                       type="text" 
-                      value={config.firebaseProjectId}
-                      onChange={e => setConfig({...config, firebaseProjectId: e.target.value})}
-                      placeholder="carmechs-prod-001"
-                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                      value={config.paytmMid}
+                      onChange={e => setConfig({...config, paytmMid: e.target.value})}
+                      placeholder="CARMEC83726..."
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-blue-500 outline-none"
                    />
                 </div>
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Deployment Region</label>
+                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Merchant Key</label>
                    <input 
-                      type="text" 
-                      value={config.firebaseRegion}
-                      onChange={e => setConfig({...config, firebaseRegion: e.target.value})}
-                      placeholder="asia-east1"
-                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                      type="password" 
+                      value={config.paytmKey}
+                      onChange={e => setConfig({...config, paytmKey: e.target.value})}
+                      placeholder="••••••••••••••••"
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-blue-500 outline-none"
                    />
+                </div>
+             </div>
+          </div>
+
+          {/* Firebase */}
+          <div className="space-y-8 bg-card-bg p-10 rounded-[3rem] border border-border-subtle relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-all">
+                <Database size={100} strokeWidth={1} />
+             </div>
+             <div className="flex items-center gap-4 border-b border-white/5 pb-6">
+                <div className="w-12 h-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary">
+                   <Database size={24} />
+                </div>
+                <h3 className="text-xl font-black text-white uppercase italic">Firebase Hub</h3>
+             </div>
+             
+              <div className="space-y-6 relative z-10">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Project ID</label>
+                    <input 
+                        type="text" 
+                        value={config.firebaseProjectId}
+                        onChange={e => setConfig({...config, firebaseProjectId: e.target.value})}
+                        placeholder="carmechs-prod"
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">API Key</label>
+                    <input 
+                        type="password" 
+                        value={config.firebaseApiKey}
+                        onChange={e => setConfig({...config, firebaseApiKey: e.target.value})}
+                        placeholder="AIzaSy..."
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Auth Domain</label>
+                    <input 
+                        type="text" 
+                        value={config.firebaseAuthDomain}
+                        onChange={e => setConfig({...config, firebaseAuthDomain: e.target.value})}
+                        placeholder="carmechs.firebaseapp.com"
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">App ID</label>
+                    <input 
+                        type="text" 
+                        value={config.firebaseAppId}
+                        onChange={e => setConfig({...config, firebaseAppId: e.target.value})}
+                        placeholder="1:1234:web:abcd"
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Storage Bucket</label>
+                  <input 
+                      type="text" 
+                      value={config.firebaseStorageBucket}
+                      onChange={e => setConfig({...config, firebaseStorageBucket: e.target.value})}
+                      placeholder="carmechs.appspot.com"
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-bold text-white focus:border-secondary outline-none"
+                  />
                 </div>
                 <div className="flex items-center justify-between p-6 bg-white/5 rounded-2xl border border-white/5">
                    <div className="space-y-1">
-                      <div className="text-[11px] font-black text-white uppercase">Auto-Scaling</div>
-                      <div className="text-[9px] font-bold text-text-dim uppercase">Dynamic resource allocation</div>
+                      <div className="text-[11px] font-black text-white uppercase">Self-Healing</div>
+                      <div className="text-[9px] font-bold text-text-dim uppercase">Auto-correction for registry drift</div>
                    </div>
                    <button 
                       onClick={() => setConfig({...config, enableAutoScaling: !config.enableAutoScaling})}
@@ -5302,10 +5716,10 @@ function SystemTab() {
        <button 
           onClick={handleSave}
           disabled={saving}
-          className="w-full py-6 bg-primary text-white rounded-3xl font-black text-base uppercase tracking-[0.4em] shadow-2xl shadow-primary/30 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-4"
+          className="w-full py-6 bg-primary text-white rounded-3xl font-black text-base uppercase tracking-[0.4em] shadow-2xl shadow-primary/30 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-4 group"
        >
-          <RefreshCw size={24} className={saving ? "animate-spin" : ""} />
-          {saving ? "Deploying Ecosystem..." : "Update System Parameters"}
+          <RefreshCw size={24} className={cn("group-hover:rotate-180 transition-transform duration-700", saving && "animate-spin")} />
+          {saving ? "Deploying Ecosystem..." : "Synchronize System Intelligence"}
        </button>
     </div>
   );

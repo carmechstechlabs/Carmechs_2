@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { useAuth } from "../hooks/useAuth";
+import { useConfig } from "../hooks/useConfig";
 import { db } from "../lib/firebase";
 import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { cn } from "../lib/utils";
@@ -21,6 +22,7 @@ import { useNavigate } from "react-router-dom";
 
 export default function Support() {
   const { user } = useAuth();
+  const { config } = useConfig();
   const navigate = useNavigate();
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +268,7 @@ export default function Support() {
 
       {/* Persistent WhatsApp Node */}
       <a 
-        href={`https://wa.me/${config.whatsapp || "919831231431"}`}
+        href={`https://wa.me/${config.whatsappNumber || "919831231431"}`}
         target="_blank"
         rel="noreferrer"
         className="fixed bottom-8 right-8 w-16 h-16 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl shadow-emerald-500/40 hover:scale-110 active:scale-95 transition-all z-[100] group"

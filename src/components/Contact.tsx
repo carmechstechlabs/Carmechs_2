@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { Mail, Phone, MapPin, Send, Loader2, CheckCircle, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "react-toastify";
 import { db } from "../lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { sendContactSubmissionAlert } from "../lib/mail";
 import { useConfig } from "../hooks/useConfig";
 import { cn } from "../lib/utils";
 
@@ -27,6 +29,10 @@ export default function Contact() {
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email format";
     if (!formData.carModel.trim()) newErrors.carModel = "Tell us what you drive!";
     
+    if (Object.keys(newErrors).length > 0) {
+      toast.error("Form validation failed. Please check the fields.");
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -48,13 +54,23 @@ export default function Contact() {
         status: "open",
         createdAt: serverTimestamp(),
       });
+      
+      // Trigger notification to support team
+      await sendContactSubmissionAlert({
+        name: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        message: `[CAR: ${formData.carModel}] [SERVICE: ${formData.serviceType}] ${formData.message}`
+      });
+
       setIsSuccess(true);
+      toast.success("Message transmitted successfully!");
       setFormData({ fullName: "", phone: "", email: "", carModel: "", serviceType: "General Service", message: "" });
       setErrors({});
       setTimeout(() => setIsSuccess(false), 5000);
     } catch (error) {
       console.error("Error sending inquiry:", error);
-      alert("Transmission failed. Please check your connection.");
+      toast.error("Transmission failed. Please check your connection.");
     } finally {
       setIsSubmitting(false);
     }
@@ -255,12 +271,21 @@ export default function Contact() {
 
                     <button 
                       disabled={isSubmitting || !isFormValid}
-                      className="w-full py-6 rounded-2xl bg-primary text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-4 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 disabled:opacity-30 disabled:grayscale disabled:scale-100 active:scale-95 group/submit"
+                      className={cn(
+                        "w-full py-6 rounded-2xl bg-primary text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-4 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 disabled:opacity-30 disabled:grayscale disabled:scale-100 active:scale-95 group/submit relative overflow-hidden",
+                        isSubmitting && "cursor-wait"
+                      )}
                     >
                       {isSubmitting ? (
                         <>
                           <Loader2 size={24} className="animate-spin" />
-                          Sending...
+                          <span>Transmitting Intel...</span>
+                          <motion.div 
+                            className="absolute bottom-0 left-0 h-1 bg-white/30"
+                            initial={{ width: "0%" }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                          />
                         </>
                       ) : (
                         <>

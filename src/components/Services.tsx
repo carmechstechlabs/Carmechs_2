@@ -21,7 +21,8 @@ import {
   Star,
   Quote,
   MessageSquare,
-  Send
+  Send,
+  Search
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
@@ -155,6 +156,7 @@ export default function Services() {
   const [showCarPicker, setShowCarPicker] = useState(false);
   const [sortBy, setSortBy] = useState<"none" | "price-asc" | "price-desc" | "title-asc" | "title-desc">("none");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const { addToCart } = useCart();
 
   useEffect(() => {
@@ -298,9 +300,15 @@ export default function Services() {
   
   const filteredServices = services
     .filter(s => {
+      const searchLower = searchQuery.toLowerCase();
+      const titleMatch = s.title?.toLowerCase().includes(searchLower);
+      const descMatch = s.description?.toLowerCase().includes(searchLower);
+      const excerptMatch = s.excerpt?.toLowerCase().includes(searchLower);
+      const nameMatch = titleMatch || descMatch || excerptMatch;
+
       const catMatch = activeCategories.includes("All") || activeCategories.includes(s.category);
       const featMatch = activeFeatures.length === 0 || activeFeatures.every(f => (s.features || []).includes(f));
-      return catMatch && featMatch;
+      return nameMatch && catMatch && featMatch;
     })
     .sort((a, b) => {
       if (sortBy === "none") return 0;
@@ -368,132 +376,143 @@ export default function Services() {
             </p>
           </div>
 
-            <div className="flex flex-col gap-6 items-end">
-      {/* Sorting and Protocol Controls */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8 mb-12 bg-slate-50/50 p-8 rounded-[3rem] border border-slate-100">
-        <div className="flex flex-col gap-6 w-full lg:w-auto">
-          {/* Category Filter */}
-          <div className="space-y-3">
-             <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em] flex items-center gap-2">
-               <Settings2 size={12} /> Service Category Protocol
-             </div>
-             <div className="flex flex-wrap gap-2">
-               {derivedCategories.map((cat: string) => (
-                 <button
-                   key={cat}
-                   onClick={() => toggleCategory(cat)}
-                   className={cn(
-                     "px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2",
-                     activeCategories.includes(cat) 
-                       ? "bg-primary text-white border-primary shadow-xl shadow-primary/20 scale-105" 
-                       : "bg-white text-slate-400 border-slate-100 hover:bg-slate-100 hover:text-slate-600"
-                   )}
-                 >
-                   {cat}
-                   {activeCategories.includes(cat) && cat !== "All" && (
-                     <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                   )}
-                 </button>
-               ))}
-             </div>
+          <div className="flex flex-col gap-6 items-end w-full lg:w-auto">
+            {/* Search Hub */}
+            <div className="relative group w-full lg:w-96">
+               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-primary transition-colors" size={20} />
+               <input 
+                 type="text"
+                 placeholder="SEARCH_SERVICE_MANIFEST..."
+                 value={searchQuery}
+                 onChange={(e) => setSearchQuery(e.target.value)}
+                 className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-6 pl-16 pr-8 text-sm font-bold text-ink focus:outline-none focus:border-primary/30 transition-all shadow-inner uppercase tracking-widest placeholder:text-slate-300"
+               />
+            </div>
           </div>
+        </div>
 
-          {/* Features Filter */}
-          <div className="space-y-3">
-             <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em] flex items-center gap-2">
-               <Activity size={12} /> Operational Feature Toggles
-             </div>
-             <div className="flex flex-wrap gap-2 items-center">
-               <div className="relative group">
-                 <select 
-                   onChange={(e) => {
-                     const feat = e.target.value;
-                     if (feat && !activeFeatures.includes(feat)) {
-                       setActiveFeatures([...activeFeatures, feat]);
-                     }
-                     e.target.value = "";
-                   }}
-                   className="bg-white border border-slate-100 rounded-xl px-5 py-3 text-[9px] font-black uppercase tracking-[0.2em] outline-none focus:border-primary shadow-sm min-w-[200px] appearance-none cursor-pointer pr-10"
-                 >
-                   <option value="">+ TAG FEATURE</option>
-                   {derivedFeatures
-                     .filter(f => !activeFeatures.includes(f))
-                     .map(f => (
-                       <option key={f} value={f}>{f}</option>
-                     ))
-                   }
-                 </select>
-                 <ChevronRight size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none rotate-90" />
+        {/* Filters and Controls Hub */}
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-8 mb-12 bg-slate-50/50 p-8 rounded-[3rem] border border-slate-100">
+          <div className="flex flex-col gap-6 w-full lg:w-auto">
+            {/* Category Filter */}
+            <div className="space-y-3">
+               <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em] flex items-center gap-2">
+                 <Settings2 size={12} /> Service Category Protocol
                </div>
+               <div className="flex flex-wrap gap-2">
+                 {derivedCategories.map((cat: string) => (
+                   <button
+                     key={cat}
+                     onClick={() => toggleCategory(cat)}
+                     className={cn(
+                       "px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2",
+                       activeCategories.includes(cat) 
+                         ? "bg-primary text-white border-primary shadow-xl shadow-primary/10 scale-105" 
+                         : "bg-white text-slate-400 border-slate-100 hover:bg-slate-100 hover:text-slate-600"
+                     )}
+                   >
+                     {cat}
+                     {activeCategories.includes(cat) && cat !== "All" && (
+                       <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                     )}
+                   </button>
+                 ))}
+               </div>
+            </div>
 
-               {activeFeatures.map(feat => (
-                 <button
-                   key={feat}
-                   onClick={() => setActiveFeatures(prev => prev.filter(f => f !== feat))}
-                   className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-900 text-white shadow-lg flex items-center gap-2 hover:bg-rose-500 transition-all group"
-                 >
-                   {feat}
-                   <X size={10} className="group-hover:rotate-90 transition-transform" />
-                 </button>
-               ))}
-               {activeFeatures.length > 0 && (
-                 <button 
-                   onClick={() => setActiveFeatures([])} 
-                   className="text-[9px] font-black uppercase tracking-widest text-primary hover:underline ml-2"
-                 >
-                   Reset Tags
-                 </button>
-               )}
-             </div>
-          </div>
-        </div>
+            {/* Features Filter */}
+            <div className="space-y-3">
+               <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em] flex items-center gap-2">
+                 <Activity size={12} /> Operational Feature Toggles
+               </div>
+               <div className="flex flex-wrap gap-2 items-center">
+                 <div className="relative group">
+                   <select 
+                     onChange={(e) => {
+                       const feat = e.target.value;
+                       if (feat && !activeFeatures.includes(feat)) {
+                         setActiveFeatures([...activeFeatures, feat]);
+                       }
+                       e.target.value = "";
+                     }}
+                     className="bg-white border border-slate-100 rounded-xl px-5 py-3 text-[9px] font-black uppercase tracking-[0.2em] outline-none focus:border-primary shadow-sm min-w-[200px] appearance-none cursor-pointer pr-10"
+                   >
+                     <option value="">+ TAG FEATURE</option>
+                     {derivedFeatures
+                       .filter(f => !activeFeatures.includes(f))
+                       .map(f => (
+                         <option key={f} value={f}>{f}</option>
+                       ))
+                     }
+                   </select>
+                   <ChevronRight size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none rotate-90" />
+                 </div>
 
-        {/* Sort Controls */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm w-full lg:w-auto">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Zap size={12} className="text-primary" /> Sequencing Logic
+                 {activeFeatures.map(feat => (
+                   <button
+                     key={feat}
+                     onClick={() => setActiveFeatures(prev => prev.filter(f => f !== feat))}
+                     className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-900 text-white shadow-lg flex items-center gap-2 hover:bg-rose-500 transition-all group"
+                   >
+                     {feat}
+                     <X size={10} className="group-hover:rotate-90 transition-transform" />
+                   </button>
+                 ))}
+                 {activeFeatures.length > 0 && (
+                   <button 
+                     onClick={() => setActiveFeatures([])} 
+                     className="text-[9px] font-black uppercase tracking-widest text-primary hover:underline ml-2"
+                   >
+                     Reset Tags
+                   </button>
+                 )}
+               </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button 
-              onClick={() => setSortBy(sortBy === "price-asc" ? "none" : "price-asc")}
-              className={cn(
-                "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
-                sortBy === "price-asc" ? "bg-primary border-primary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              Price: Low-High
-            </button>
-            <button 
-              onClick={() => setSortBy(sortBy === "price-desc" ? "none" : "price-desc")}
-              className={cn(
-                "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
-                sortBy === "price-desc" ? "bg-primary border-primary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              Price: High-Low
-            </button>
-            <button 
-              onClick={() => setSortBy(sortBy === "title-asc" ? "none" : "title-asc")}
-              className={cn(
-                "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
-                sortBy === "title-asc" ? "bg-secondary border-secondary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              Title: A-Z
-            </button>
-            <button 
-              onClick={() => setSortBy(sortBy === "title-desc" ? "none" : "title-desc")}
-              className={cn(
-                "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
-                sortBy === "title-desc" ? "bg-secondary border-secondary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              Title: Z-A
-            </button>
-          </div>
-        </div>
-      </div>
 
+          {/* Sort Controls */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm w-full lg:w-auto">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Zap size={12} className="text-primary" /> Sequencing Logic
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => setSortBy(sortBy === "price-asc" ? "none" : "price-asc")}
+                className={cn(
+                  "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
+                  sortBy === "price-asc" ? "bg-primary border-primary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                Price: Low-High
+              </button>
+              <button 
+                onClick={() => setSortBy(sortBy === "price-desc" ? "none" : "price-desc")}
+                className={cn(
+                  "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
+                  sortBy === "price-desc" ? "bg-primary border-primary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                Price: High-Low
+              </button>
+              <button 
+                onClick={() => setSortBy(sortBy === "title-asc" ? "none" : "title-asc")}
+                className={cn(
+                  "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
+                  sortBy === "title-asc" ? "bg-secondary border-secondary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                Title: A-Z
+              </button>
+              <button 
+                onClick={() => setSortBy(sortBy === "title-desc" ? "none" : "title-desc")}
+                className={cn(
+                  "px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center border-2",
+                  sortBy === "title-desc" ? "bg-secondary border-secondary text-white shadow-lg" : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                Title: Z-A
+              </button>
+            </div>
           </div>
         </div>
 
@@ -608,9 +627,14 @@ export default function Services() {
                     </div>
 
                     {service.excerpt && (
-                      <p className="text-primary font-black text-[10px] uppercase tracking-[0.2em] mb-4">
-                        {service.excerpt}
-                      </p>
+                      <div className="relative overflow-hidden mb-4">
+                        <p className={cn(
+                          "text-primary font-black text-[10px] uppercase tracking-[0.2em] transition-all duration-500",
+                          !isExpanded && "group-hover:translate-x-2"
+                        )}>
+                          {service.excerpt}
+                        </p>
+                      </div>
                     )}
 
                     <p className={cn(
@@ -728,11 +752,16 @@ export default function Services() {
                                                  (v.model.toLowerCase() === 'all' || selectedCar.model.toLowerCase() === v.model.toLowerCase()) &&
                                                  (v.fuel.toLowerCase() === 'all' || selectedCar.fuel.toLowerCase() === v.fuel.toLowerCase());
                                   return (
-                                    <div 
+                                    <button 
                                       key={i} 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedCar({ make: v.make, model: v.model, fuel: v.fuel });
+                                        toast.success(`Vehicle calibrated: ${v.make} ${v.model}`);
+                                      }}
                                       className={cn(
-                                        "flex items-center justify-between p-4 rounded-2xl border transition-all",
-                                        isSelected ? "bg-white border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/5" : "bg-white/40 border-slate-100"
+                                        "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group/v",
+                                        isSelected ? "bg-white border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/5" : "bg-white/40 border-slate-100 hover:border-primary/30 hover:bg-white"
                                       )}
                                     >
                                       <div className="flex flex-col">
@@ -741,9 +770,15 @@ export default function Services() {
                                       </div>
                                       <div className="flex items-center gap-4">
                                         <span className={cn("text-sm font-black italic", isSelected ? "text-primary" : "text-slate-400")}>₹{v.price}</span>
-                                        {isSelected && <Zap size={14} className="text-primary animate-pulse" />}
+                                        {isSelected ? (
+                                          <Zap size={14} className="text-primary animate-pulse" />
+                                        ) : (
+                                          <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 group-hover/v:bg-primary group-hover/v:text-white transition-all">
+                                            <ChevronRight size={14} />
+                                          </div>
+                                        )}
                                       </div>
-                                    </div>
+                                    </button>
                                   );
                                 })}
                               </div>

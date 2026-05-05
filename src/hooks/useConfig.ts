@@ -34,6 +34,8 @@ export interface UIConfig {
   cashOnServiceEnabled: boolean;
   fontFamily: string;
   baseFontSize: number;
+  fontColor?: string;
+  headingColor?: string;
 }
 
 const DEFAULT_CONFIG: UIConfig = {
@@ -69,6 +71,8 @@ const DEFAULT_CONFIG: UIConfig = {
   cashOnServiceEnabled: true,
   fontFamily: "Inter",
   baseFontSize: 16,
+  fontColor: "#1e293b",
+  headingColor: "#0f172a",
 };
 
 export function useConfig() {
@@ -89,6 +93,13 @@ export function useConfig() {
         }
         if (data.baseFontSize) {
           document.documentElement.style.fontSize = `${data.baseFontSize}px`;
+        }
+        if (data.fontColor) {
+          document.documentElement.style.setProperty('--color-text-main', data.fontColor);
+          document.body.style.color = data.fontColor;
+        }
+        if (data.headingColor) {
+          document.documentElement.style.setProperty('--color-heading', data.headingColor);
         }
       }
       setLoading(false);

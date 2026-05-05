@@ -41,10 +41,14 @@ export const loadGatewayScript = (): Promise<boolean> => {
   });
 };
 
-export const initializePayment = async (options: PaymentOptions): Promise<PaymentResponse> => {
+export const initializePayment = async (options: PaymentOptions, method: string = "upi_razorpay"): Promise<PaymentResponse> => {
+  if (method === "cash") {
+    return { id: "CASH_" + Date.now(), status: "success", orderId: "CASH_ORDER" };
+  }
+
   const isScriptLoaded = await loadGatewayScript();
   if (!isScriptLoaded) {
-    throw new Error("Razorpay SDK failed to load");
+    throw new Error("Payment gateway SDK failed to load");
   }
 
   // 1. Create order on the server
@@ -54,14 +58,15 @@ export const initializePayment = async (options: PaymentOptions): Promise<Paymen
     body: JSON.stringify({
       amount: options.amount,
       currency: options.currency,
-      receipt: options.receipt
+      receipt: options.receipt,
+      method
     }),
   });
 
   const order = await orderResponse.json();
 
   if (order.mock) {
-     console.log("Operating in mock mode as Razorpay keys are not configured.");
+     console.log(`Operating in mock mode as ${method} keys are not configured.`);
      return {
        id: `pay_mock_${Math.random().toString(36).substring(7)}`,
        status: 'success',
@@ -69,10 +74,22 @@ export const initializePayment = async (options: PaymentOptions): Promise<Paymen
      };
   }
 
+  if (method === "paytm") {
+    // Paytm redirect logic would normally go here
+    // For this implementation, we'll simulate the gateway interaction
+    // in a real app, you'd use the Paytm JS Checkout or redirect to their pg
+    console.log("Paytm Gateway engaged. Mid:", order.mid);
+    return new Promise((resolve) => {
+       setTimeout(() => {
+          resolve({ id: "paytm_" + Date.now(), orderId: order.id, status: "success" });
+       }, 2000);
+    });
+  }
+
   // 2. Open Razorpay Checkout modal
   return new Promise((resolve) => {
     const rzpOptions = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_placeholder",
+      key: order.key_id || import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_placeholder",
       amount: order.amount,
       currency: order.currency,
       name: "CarMechs Services",
@@ -86,7 +103,8 @@ export const initializePayment = async (options: PaymentOptions): Promise<Paymen
           body: JSON.stringify({
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature
+            razorpay_signature: response.razorpay_signature,
+            method
           }),
         });
 

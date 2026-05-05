@@ -18,9 +18,15 @@ import {
   AlertCircle,
   Fuel,
   Droplets,
-  Globe
+  Globe,
+  X,
+  Check,
+  MapPin,
+  ChevronDown,
+  Wind
 } from "lucide-react";
 import { db, auth } from "../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc } from "firebase/firestore";
 import { cn } from "../lib/utils";
 import { useConfig } from "../hooks/useConfig";
@@ -59,42 +65,87 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
     message: ""
   });
 
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setBookingData(prev => ({
+          ...prev,
+          fullName: u.displayName || prev.fullName,
+          email: u.email || prev.email,
+          phone: u.phoneNumber || prev.phone
+        }));
+        
+        // Fetch additional profile info if needed
+        getDoc(doc(db, "users", u.uid)).then(snap => {
+          if (snap.exists()) {
+            const profile = snap.data();
+            setBookingData(prev => ({
+              ...prev,
+              fullName: profile.fullName || profile.name || prev.fullName,
+              phone: profile.phone || profile.phoneNumber || prev.phone,
+              address: profile.address || prev.address,
+              city: profile.city || prev.city,
+            }));
+          }
+        });
+      }
+    });
+    return unsubAuth;
+  }, []);
+
   const nextStep = () => setStep(prev => prev + 1);
   const backStep = () => setStep(prev => prev - 1);
   const goToStep = (s: number) => setStep(s);
 
   return (
     <div className="bg-white rounded-[3rem] shadow-2xl border-4 border-white overflow-hidden max-w-4xl w-full mx-auto relative h-[85vh] flex flex-col">
-       {/* Progress Bar */}
-       <div className="absolute top-0 left-0 w-full h-2 bg-slate-50 overflow-hidden z-20">
-      <motion.div 
-        className="h-full bg-primary"
-        initial={{ width: "0%" }}
-        animate={{ width: `${(step / 7) * 100}%` }}
-      />
-       </div>
+        {/* Progress Stepper */}
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-50 overflow-hidden z-20">
+          <motion.div 
+            className="h-full bg-primary"
+            initial={{ width: "0%" }}
+            animate={{ width: `${(step / 7) * 100}%` }}
+          />
+        </div>
 
-       <div className="p-12 pb-0 flex items-center justify-between relative z-10">
-          <div>
-            <div className="inline-block bg-primary-soft text-primary px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest mb-2">
-               Phase {step} of 7
-            </div>
-            <h2 className="text-4xl font-black text-ink tracking-tight">
-               {step === 1 && "Vehicle Details"}
-               {step === 2 && "Service Location"}
-               {step === 3 && "Select Service"}
-               {step === 4 && "Schedule & Expert"}
-               {step === 5 && "Contact & Car Info"}
-               {step === 6 && "Review Order"}
-               {step === 7 && "Digital Receipt"}
-            </h2>
-          </div>
-          {onClose && (
-            <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors">
-              <span className="font-bold">ESC</span>
-            </button>
-          )}
-       </div>
+        <div className="px-12 pt-12 pb-6 flex items-center justify-between relative z-10 border-b border-slate-50">
+           <div className="flex-1">
+             <div className="flex items-center gap-3 mb-4">
+                {[1, 2, 3, 4, 5, 6, 7].map(s => (
+                  <div key={s} className="flex items-center">
+                    <motion.div 
+                      className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all",
+                        s < step ? "bg-emerald-500 text-white" : s === step ? "bg-primary text-white shadow-lg shadow-primary/20 scale-110" : "bg-slate-100 text-slate-400"
+                      )}
+                      animate={s === step ? { scale: [1, 1.1, 1] } : {}}
+                      transition={s === step ? { repeat: Infinity, duration: 2 } : {}}
+                    >
+                      {s < step ? <CheckCircle2 size={14} /> : s}
+                    </motion.div>
+                    {s < 7 && <div className={cn("w-4 h-0.5 mx-1", s < step ? "bg-emerald-200" : "bg-slate-50")} />}
+                  </div>
+                ))}
+             </div>
+             <div>
+                <h2 className="text-4xl font-black text-ink tracking-tight flex items-center gap-4 italic uppercase">
+                   <div className="w-1.5 h-10 bg-primary rounded-full hidden md:block" />
+                   {step === 1 && "Vehicle Selection"}
+                   {step === 2 && "Tactical Location"}
+                   {step === 3 && "Service Manifest"}
+                   {step === 4 && "Deployment Logic"}
+                   {step === 5 && "Operator Intel"}
+                   {step === 6 && "Mission Control"}
+                   {step === 7 && "Mission Success"}
+                </h2>
+             </div>
+           </div>
+           {onClose && (
+             <button onClick={onClose} className="w-14 h-14 rounded-3xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-all hover:rotate-90 group">
+               <X size={20} className="group-hover:scale-125 transition-transform" />
+             </button>
+           )}
+        </div>
 
        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
           <AnimatePresence mode="wait">
@@ -362,8 +413,8 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
             </div>
          </div>
        )}
-       {step === 3 && (
-         <div className="space-y-6">
+        {step === 3 && (
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
               <button onClick={() => { setStep(2); setSearch(""); }} className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-1 hover:gap-2 transition-all">← Back to Models</button>
               <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
@@ -372,29 +423,40 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { name: "Petrol", icon: Fuel, color: "text-amber-500", bg: "bg-amber-50" },
-                { name: "Diesel", icon: Zap, color: "text-blue-500", bg: "bg-blue-50" },
-                { name: "CNG", icon: Droplets, iconColor: "text-emerald-500", bg: "bg-emerald-50" },
-                { name: "Electric", icon: Zap, iconColor: "text-cyan-500", bg: "bg-cyan-50" }
-              ].map(f => (
-                <button 
-                  key={f.name} 
-                  onClick={() => { updateData({ ...data, fuel: f.name }); onNext(); }}
-                  className={cn(
-                    "p-8 rounded-3xl border-2 transition-all flex flex-col items-center gap-4 group",
-                    data.fuel === f.name ? "border-primary bg-primary-soft text-primary" : "border-slate-50 bg-slate-50 hover:border-slate-200"
-                  )}
-                >
-                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform", f.bg)}>
-                    <f.icon size={24} className={f.iconColor || "text-primary"} />
-                  </div>
-                  <span className="font-black uppercase text-xs tracking-widest">{f.name}</span>
-                </button>
-              ))}
+               {(() => {
+                 const selectedModelObj = carHub[data.make]?.models.find((m: any) => m.name === data.model);
+                 const availableFuels = selectedModelObj?.fuelTypes || ["Petrol", "Diesel", "CNG", "Electric"];
+                 const fuelIcons: any = {
+                   "Petrol": { icon: Fuel, color: "text-amber-500", bg: "bg-amber-50" },
+                   "Diesel": { icon: Droplets, color: "text-blue-500", bg: "bg-blue-50" },
+                   "CNG": { icon: Wind, color: "text-emerald-500", bg: "bg-emerald-50" },
+                   "Electric": { icon: Zap, color: "text-cyan-500", bg: "bg-cyan-50" },
+                   "Hybrid": { icon: Zap, color: "text-indigo-500", bg: "bg-indigo-50" },
+                   "LPG": { icon: Fuel, color: "text-orange-500", bg: "bg-orange-50" }
+                 };
+
+                 return availableFuels.map((fName: string) => {
+                   const f = fuelIcons[fName] || { icon: Fuel, color: "text-slate-500", bg: "bg-slate-50" };
+                   return (
+                    <button 
+                      key={fName} 
+                      onClick={() => { updateData({ ...data, fuel: fName }); onNext(); }}
+                      className={cn(
+                        "p-8 rounded-3xl border-2 transition-all flex flex-col items-center gap-4 group",
+                        data.fuel === fName ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10 scale-105" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
+                      )}
+                    >
+                      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform", f.bg)}>
+                        <f.icon size={24} className={f.color} />
+                      </div>
+                      <span className="font-black uppercase text-xs tracking-widest">{fName}</span>
+                    </button>
+                   );
+                 });
+               })()}
             </div>
-         </div>
-       )}
+          </div>
+        )}
     </motion.div>
   );
 }
@@ -402,6 +464,7 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
 function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const cart = data.cart || [];
 
   useEffect(() => {
     return onSnapshot(query(collection(db, "services"), where("isActive", "==", true)), (snap) => {
@@ -423,6 +486,7 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
     const lowerModel = data.carDetails.model.toLowerCase();
     const lowerFuel = data.carDetails.fuel.toLowerCase();
 
+    // Priority matching logic
     return variants.find((v: any) => 
       v.make.toLowerCase() === lowerMake && 
       v.model.toLowerCase() === lowerModel && 
@@ -449,6 +513,26 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
     );
   };
 
+  const toggleService = (s: any) => {
+    const variant = getDynamicVariant(s);
+    const finalPrice = variant ? variant.price : s.price;
+    
+    const isSelected = cart.find((item: any) => item.id === s.id);
+    let newCart;
+    if (isSelected) {
+      newCart = cart.filter((item: any) => item.id !== s.id);
+    } else {
+      newCart = [...cart, { id: s.id, title: s.title, price: finalPrice }];
+    }
+    const total = newCart.reduce((acc: number, item: any) => acc + item.price, 0);
+    updateData({ 
+      ...data, 
+      cart: newCart, 
+      price: total,
+      serviceType: newCart.length > 0 ? (newCart.length === 1 ? newCart[0].title : `${newCart[0].title} + ${newCart.length - 1} more`) : "No Service Selected"
+    });
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -456,42 +540,94 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6"
     >
-       <div className="grid gap-4">
+       <div className="grid gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
           {services.map(s => {
             const variant = getDynamicVariant(s);
             const finalPrice = variant ? variant.price : s.price;
+            const isSelected = cart.find((item: any) => item.id === s.id);
             
             return (
-              <button 
-                key={s.id}
-                onClick={() => {
-                  updateData({ serviceId: s.id, serviceType: s.title, price: finalPrice });
-                  onNext();
-                }}
-                className={cn(
-                  "p-6 rounded-3xl border-2 text-left flex items-center justify-between transition-all group",
-                  data.serviceId === s.id ? "border-primary bg-primary-soft" : "border-slate-50 bg-slate-50 hover:border-slate-200"
-                )}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm group-hover:rotate-6">
-                    <Wrench size={20} />
-                  </div>
-                  <div>
-                    <div className="font-black text-ink uppercase tracking-tight">{s.title}</div>
-                    <div className="flex items-center gap-2">
-                      <div className={cn("text-[10px] font-bold uppercase tracking-widest", variant ? "text-primary" : "text-slate-400")}>
-                        {variant ? `Vehicle Price: ₹${finalPrice}` : `Starting from ₹${s.price}`}
+              <div key={s.id} className="space-y-2">
+                <button 
+                  onClick={() => toggleService(s)}
+                  className={cn(
+                    "w-full p-6 rounded-3xl border-2 text-left flex items-center justify-between transition-all group",
+                    isSelected ? "border-primary bg-primary-soft ring-2 ring-primary/20" : "border-slate-50 bg-slate-50 hover:border-slate-200"
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={cn(
+                      "w-12 h-12 rounded-xl flex items-center justify-center shadow-sm group-hover:rotate-6 transition-all",
+                      isSelected ? "bg-primary text-white" : "bg-white text-primary"
+                    )}>
+                      <Wrench size={20} />
+                    </div>
+                    <div>
+                      <div className="font-black text-ink uppercase tracking-tight">{s.title}</div>
+                      <div className="flex items-center gap-2">
+                        <div className={cn("text-[10px] font-bold uppercase tracking-widest", variant || isSelected ? "text-primary" : "text-slate-400")}>
+                          {variant ? `Vehicle Price Applied: ₹${finalPrice}` : `Starting from ₹${s.price}`}
+                        </div>
+                        {variant && <Zap size={10} className="text-primary animate-pulse" />}
                       </div>
-                      {variant && <Zap size={10} className="text-primary animate-pulse" />}
                     </div>
                   </div>
-                </div>
-                <ChevronRight size={20} className="text-slate-300" />
-              </button>
+                  <div className={cn(
+                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+                    isSelected ? "bg-primary border-primary text-white" : "border-slate-200 text-transparent"
+                  )}>
+                    <Check size={14} strokeWidth={3} />
+                  </div>
+                </button>
+                {/* Variant Selector if service has variants and is selected */}
+                {s.variants && s.variants.length > 0 && isSelected && (
+                  <div className="pl-16 space-y-3 pb-4">
+                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Manual Calibration (Optional)</div>
+                    <div className="flex flex-wrap gap-2">
+                       {s.variants.slice(0, 4).map((v: any, vIdx: number) => {
+                         const vMatches = v.make.toLowerCase() === data.carDetails.make.toLowerCase() && 
+                                          (v.model.toLowerCase() === 'all' || v.model.toLowerCase() === data.carDetails.model.toLowerCase()) &&
+                                          (v.fuel.toLowerCase() === 'all' || v.fuel.toLowerCase() === data.carDetails.fuel.toLowerCase());
+                         return (
+                           <button 
+                             key={vIdx}
+                             onClick={() => {
+                               const newCart = cart.map((item: any) => item.id === s.id ? { ...item, price: v.price } : item);
+                               const total = newCart.reduce((acc: number, item: any) => acc + item.price, 0);
+                               updateData({ ...data, cart: newCart, price: total });
+                             }}
+                             className={cn(
+                               "px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
+                               vMatches ? "bg-primary/10 border-primary/20 text-primary" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                             )}
+                           >
+                             {v.make} {v.model === 'all' ? 'Models' : v.model} • {v.fuel} • ₹{v.price}
+                           </button>
+                         );
+                       })}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
        </div>
+
+       {cart.length > 0 && (
+         <div className="bg-primary/5 border border-primary/10 p-6 rounded-3xl flex justify-between items-center animate-in fade-in slide-in-from-bottom-4">
+            <div>
+               <div className="text-[10px] font-black text-primary uppercase tracking-widest">Total Operation Cost</div>
+               <div className="text-xl font-black text-primary italic">₹{data.price}</div>
+            </div>
+            <button 
+              onClick={onNext}
+              className="bg-primary text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+            >
+              Confirm Cart
+            </button>
+         </div>
+       )}
+
        <button onClick={onBack} className="w-full py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-ink">Change Vehicle</button>
     </motion.div>
   );
@@ -629,60 +765,127 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
 }
 
 function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
+  const [bookingId, setBookingId] = useState("");
+  
+  useEffect(() => {
+    // Generate or fetch a unique booking ID display
+    setBookingId(data.id?.slice(0, 8).toUpperCase() || "B" + Math.random().toString(36).substring(2, 10).toUpperCase());
+  }, [data.id]);
+
   const addToCalendar = () => {
-    const title = `CarMechs: ${data.serviceType} for ${data.carDetails.make} ${data.carDetails.model}`;
-    const date = data.appointmentDate.replace(/-/g, '');
-    const startTime = "090000"; // Placeholder simplification
-    const endTime = "110000";
-    const details = `Contact: ${data.fullName}\nLocation: ${data.location}\nPlate: ${data.carDetails.plate}`;
-    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${date}T${startTime}/${date}T${endTime}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(data.location)}`;
+    const title = `CarMechs: ${data.serviceType} Execution`;
+    // Format dates for Google Calendar (YYYYMMDDTHHMMSSZ)
+    const datePart = data.appointmentDate.replace(/-/g, '');
+    
+    // Convert 12h time to 24h
+    const parseTime = (t: string) => {
+      const [time, modifier] = t.split(' ');
+      let [hours, minutes] = time.split(':');
+      if (modifier === 'PM' && hours !== '12') hours = String(parseInt(hours) + 12);
+      if (modifier === 'AM' && hours === '12') hours = '00';
+      return hours.padStart(2, '0') + minutes.padStart(2, '0') + '00';
+    };
+
+    const startTime = parseTime(data.appointmentTime);
+    const endTime = parseTime(data.appointmentTime); // Assuming 2h window but keep same for simplicity or add 2h
+    
+    const details = `Vehicle: ${data.carDetails.make} ${data.carDetails.model}\nRegistration: ${data.carDetails.plate}\nService: ${data.serviceType}\nTechnician: ${data.mechanicName || 'To be assigned'}\nBooking ID: ${bookingId}`;
+    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${datePart}T${startTime}/${datePart}T${startTime}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(data.location)}`;
     window.open(url, '_blank');
   };
 
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="text-center space-y-12 py-10"
+      className="text-center space-y-12 py-6"
     >
-       <div className="space-y-4">
-          <div className="w-24 h-24 bg-primary rounded-full flex items-center justify-center mx-auto shadow-2xl shadow-primary/30 animate-pulse">
-             <CheckCircle2 size={48} className="text-white" />
-          </div>
-          <h2 className="text-4xl font-black text-ink uppercase italic tracking-tighter">Mission Confirmed</h2>
-          <p className="text-slate-400 text-sm font-medium max-w-sm mx-auto">Your vehicle operation has been registered in the master manifest. Our logistics unit is currently processing your deployment.</p>
-       </div>
-
-       <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100 max-w-sm mx-auto space-y-6">
-          <div className="flex flex-col items-center gap-2 border-b border-slate-200 pb-6">
-             <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em]">Operational Schedule</div>
-             <div className="text-2xl font-black text-ink italic tracking-tight">{data.appointmentDate} @ {data.appointmentTime}</div>
+       <div className="space-y-6">
+          <div className="relative mx-auto w-32 h-32">
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", damping: 12 }}
+              className="w-32 h-32 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl shadow-emerald-200 relative z-10"
+            >
+               <CheckCircle2 size={64} className="text-white" />
+            </motion.div>
+            <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full animate-pulse" />
           </div>
           
-          <div className="space-y-4 pt-2">
-             <div className="flex justify-between items-center text-xs">
-                <span className="font-black text-slate-300 uppercase tracking-widest">Technician</span>
-                <span className="font-black text-ink uppercase italic">{data.mechanicName || "System Assigned"}</span>
-             </div>
-             <div className="flex justify-between items-center text-xs">
-                <span className="font-black text-slate-300 uppercase tracking-widest">Deployment Point</span>
-                <span className="font-black text-ink uppercase italic truncate max-w-[150px]">{data.location}</span>
-             </div>
+          <div>
+            <h2 className="text-5xl font-black text-ink uppercase italic tracking-tighter mb-2">Operation Confirmed</h2>
+            <div className="inline-flex items-center gap-3 bg-slate-900 text-white px-6 py-2 rounded-2xl">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50">Unit_ID</span>
+              <span className="text-sm font-mono font-black text-emerald-400">{bookingId}</span>
+            </div>
           </div>
        </div>
 
-       <div className="flex flex-col gap-4 max-w-xs mx-auto">
+       <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-xl space-y-6 text-left">
+             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
+               <Calendar size={14} /> Schedule Analysis
+             </div>
+             <div className="space-y-4">
+                <div>
+                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Deployment Date</div>
+                   <div className="text-2xl font-black text-ink italic">{new Date(data.appointmentDate).toDateString()}</div>
+                </div>
+                <div>
+                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Arrival Window</div>
+                   <div className="text-xl font-black text-primary italic uppercase tracking-tight">{data.appointmentTime} - {(() => {
+                      const [time, mod] = data.appointmentTime.split(' ');
+                      const [h, m] = time.split(':');
+                      const date = new Date();
+                      date.setHours(mod === 'PM' && h !== '12' ? parseInt(h) + 12 : (mod === 'AM' && h === '12' ? 0 : parseInt(h)));
+                      date.setMinutes(parseInt(m) + 60);
+                      let nh = date.getHours();
+                      const nmod = nh >= 12 ? 'PM' : 'AM';
+                      nh = nh % 12 || 12;
+                      return `${nh}:${m} ${nmod}`;
+                   })()}</div>
+                </div>
+             </div>
+          </div>
+
+          <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-white shadow-xl space-y-6 text-left relative overflow-hidden">
+             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+               <Car size={14} /> Spec Sheet Data
+             </div>
+             <div className="space-y-4 relative z-10">
+                <div className="flex items-center gap-4">
+                   <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                      {data.carDetails.brandLogo ? <img src={data.carDetails.brandLogo} className="w-8 h-8 object-contain" /> : <Car size={20} />}
+                   </div>
+                   <div>
+                      <div className="text-base font-black text-ink uppercase italic">{data.carDetails.make} {data.carDetails.model}</div>
+                      <div className="text-[9px] font-bold text-primary uppercase tracking-widest">{data.carDetails.fuel} • {data.carDetails.year}</div>
+                   </div>
+                </div>
+                <div className="bg-slate-900/5 p-4 rounded-2xl border border-black/5">
+                   <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">License Identifier</div>
+                   <div className="text-lg font-black text-ink uppercase tracking-[0.1em]">{data.carDetails.plate}</div>
+                </div>
+             </div>
+             <Fuel size={120} className="absolute -right-12 -bottom-12 text-slate-200 opacity-20 rotate-12" strokeWidth={1} />
+          </div>
+       </div>
+
+       <div className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto">
           <button 
             onClick={addToCalendar}
-            className="w-full py-5 rounded-2xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-primary transition-all flex items-center justify-center gap-3"
+            className="flex-1 py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-4 group"
           >
-            <Calendar size={14} /> Add to Calendar
+            <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> 
+            Add to Google Calendar
           </button>
           <button 
             onClick={onClose}
-            className="w-full py-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 hover:text-ink transition-colors"
+            className="flex-1 py-5 rounded-2xl bg-white border-2 border-slate-100 text-ink text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-50 transition-all flex items-center justify-center gap-4"
           >
-            Close Terminal
+            Exit Terminal
+            <X size={18} />
           </button>
        </div>
     </motion.div>
@@ -692,6 +895,47 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
 
 function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [cities, setCities] = useState<string[]>(["Mumbai", "Delhi", "Bangalore"]);
+  const [locating, setLocating] = useState(false);
+
+  useEffect(() => {
+    return onSnapshot(doc(db, "config", "cities"), (snap) => {
+      if (snap.exists() && snap.data().list) {
+        setCities(snap.data().list);
+      }
+    });
+  }, []);
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser ecosystem.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          // Reverse geocoding would be ideal here if we had an API key, 
+          // for now we'll just log and maybe use a public API or placeholders
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const geoData = await response.json();
+          if (geoData && geoData.display_name) {
+            updateData({ ...data, address: geoData.display_name });
+            toast.success("Strategic coordinates locked.");
+          }
+        } catch (err) {
+          toast.error("Reverse geocoding uplink failed.");
+        } finally {
+          setLocating(false);
+        }
+      },
+      (err) => {
+        toast.error("Location access denied by user.");
+        setLocating(false);
+      }
+    );
+  };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -836,7 +1080,17 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
              </div>
 
              <div className="space-y-2 text-left">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Service Site Address</label>
+                <div className="flex items-center justify-between ml-1">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Service Site Address</label>
+                   <button 
+                     onClick={handleLocateMe}
+                     disabled={locating}
+                     className="text-[9px] font-black uppercase tracking-widest text-primary flex items-center gap-2 hover:underline disabled:opacity-50"
+                   >
+                     <MapPin size={10} className={cn(locating && "animate-bounce")} />
+                     {locating ? "LOCKING..." : "USE_GPS_LOCATE"}
+                   </button>
+                </div>
                 <input 
                   type="text" 
                   value={data.address}
@@ -853,15 +1107,17 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
              <div className="grid md:grid-cols-2 gap-6">
                <div className="space-y-2 text-left">
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Deployment City</label>
-                 <select 
-                    value={data.city}
-                    onChange={(e) => updateData({ ...data, city: e.target.value })}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-bold appearance-none"
-                 >
-                    <option value="Mumbai">Mumbai</option>
-                    <option value="Delhi">Delhi</option>
-                    <option value="Bangalore">Bangalore</option>
-                 </select>
+                 <div className="relative">
+                   <select 
+                      value={data.city}
+                      onChange={(e) => updateData({ ...data, city: e.target.value })}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-bold appearance-none"
+                   >
+                      <option value="" disabled>SELECT_CITY</option>
+                      {cities.map(city => <option key={city} value={city}>{city}</option>)}
+                   </select>
+                   <ChevronDown size={16} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                 </div>
                </div>
                <div className="space-y-2 text-left">
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Digital Email Uplink</label>
@@ -977,7 +1233,22 @@ function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps &
              </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-12 pt-8 border-t border-slate-200">
+            <div className="pt-8 border-t border-slate-200">
+               <SectionHeader title="Operational Protocol (Cart)" step={2} />
+               <div className="space-y-3">
+                  {(data.cart || []).map((item: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center text-sm font-bold text-ink bg-white p-4 rounded-2xl border border-slate-100">
+                       <div className="flex items-center gap-3">
+                          <CheckCircle2 size={16} className="text-emerald-500" />
+                          <span className="uppercase italic">{item.title}</span>
+                       </div>
+                       <span className="text-primary">₹{item.price}</span>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-12 pt-8">
              <div className="space-y-6">
                 <div>
                    <SectionHeader title="Vehicle Info" step={1} />
@@ -1194,7 +1465,7 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
        let payStatus = "pending";
 
        if (paymentMethod !== 'cash') {
-         // Real Razorpay Integration
+         // Real Gateway Integration
          const payResponse = await initializePayment({
            amount: data.price,
            currency: 'INR',
@@ -1202,7 +1473,7 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
            customerName: data.fullName,
            customerEmail: data.email,
            customerPhone: data.phone
-         });
+         }, paymentMethod);
 
          if (payResponse.status !== 'success') {
            throw new Error(payResponse.status === 'cancelled' ? "Payment Cancelled by User" : "Payment Authorization Failed");
@@ -1227,7 +1498,16 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
        // Trigger Server-Side Email Notification
         // Send confirmation emails
         try {
-          await sendConfirmationEmail(data.email, data.fullName, bookingRef.id);
+          await sendConfirmationEmail(
+            data.email, 
+            data.fullName, 
+            bookingRef.id, 
+            data.serviceType, 
+            data.appointmentDate, 
+            data.appointmentTime, 
+            data.cart, 
+            data.price
+          );
           await sendNewBookingAlert({ ...data, id: bookingRef.id });
         } catch (mailErr) {
           console.warn("Mail service dispatch failed:", mailErr);
@@ -1305,8 +1585,9 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
           <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Authorize Service Transaction</label>
           <div className="grid gap-3">
              {[
-               { id: "upi_razorpay", name: "Razorpay (UPI)", icon: <Zap size={18} />, color: "bg-primary" },
-               { id: "paytm", name: "Paytm Checkout", icon: <Car size={18} />, color: "bg-blue-500" },
+               { id: "upi_razorpay", name: "Razorpay (UPI / Card)", icon: <Zap size={18} />, color: "bg-primary" },
+               { id: "paytm", name: "Paytm Checkout", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/Paytm_Logo_%28standalone%29.png" alt="Paytm" className="w-8" />, color: "bg-white border-blue-500" },
+               { id: "phonepe", name: "PhonePe", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/PhonePe_Logo.png" alt="PhonePe" className="w-8" />, color: "bg-white border-purple-500" },
                ...(config?.cashOnServiceEnabled ? [{ id: "cash", name: "Cash After Service", icon: <Phone size={18} />, color: "bg-amber-500" }] : [])
              ].map(method => (
                 <button 
