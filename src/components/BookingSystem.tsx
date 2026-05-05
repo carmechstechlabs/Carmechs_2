@@ -384,7 +384,12 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
               {models.map((m: any) => (
                 <button 
                   key={m.name} 
-                  onClick={() => { updateData({ ...data, model: m.name, modelLogo: m.logo }); setStep(3); setSearch(""); }}
+                  onClick={() => { 
+                    const modelLogo = m.logo || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.name)}&backgroundColor=334155&fontSize=45&bold=true`;
+                    updateData({ ...data, model: m.name, modelLogo }); 
+                    setStep(3); 
+                    setSearch(""); 
+                  }}
                   className={cn(
                     "p-8 rounded-[2.5rem] border-2 transition-all flex flex-col items-center justify-center gap-5 group relative overflow-hidden",
                     data.model === m.name ? "border-primary bg-primary-soft text-primary shadow-xl shadow-primary/5" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white hover:shadow-xl"
@@ -433,26 +438,37 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
                    "Electric": { icon: Zap, color: "text-cyan-500", bg: "bg-cyan-50" },
                    "Hybrid": { icon: Zap, color: "text-indigo-500", bg: "bg-indigo-50" },
                    "LPG": { icon: Fuel, color: "text-orange-500", bg: "bg-orange-50" }
-                 };
-
-                 return availableFuels.map((fName: string) => {
-                   const f = fuelIcons[fName] || { icon: Fuel, color: "text-slate-500", bg: "bg-slate-50" };
-                   return (
-                    <button 
-                      key={fName} 
-                      onClick={() => { updateData({ ...data, fuel: fName }); onNext(); }}
-                      className={cn(
-                        "p-8 rounded-3xl border-2 transition-all flex flex-col items-center gap-4 group",
-                        data.fuel === fName ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10 scale-105" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
-                      )}
-                    >
-                      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform", f.bg)}>
-                        <f.icon size={24} className={f.color} />
-                      </div>
-                      <span className="font-black uppercase text-xs tracking-widest">{fName}</span>
-                    </button>
-                   );
-                 });
+                 };                  return availableFuels.map((fName: string) => {
+                    const f = fuelIcons[fName] || { icon: Fuel, color: "text-slate-500", bg: "bg-amber-50" };
+                    return (
+                     <button 
+                       key={fName} 
+                       onClick={() => { 
+                         // Validate fuel selection against available fuels
+                         const isValid = availableFuels.includes(fName);
+                         if (isValid) {
+                           updateData({ ...data, fuel: fName }); 
+                           onNext(); 
+                         } else {
+                           // Fallback to the first available fuel type for this model
+                           const fallback = availableFuels[0] || "Petrol";
+                           updateData({ ...data, fuel: fallback });
+                           onNext();
+                           toast.info(`Note: ${fName} specs unavailable for this model. Defaulting to ${fallback}.`);
+                         }
+                       }}
+                       className={cn(
+                         "p-8 rounded-3xl border-2 transition-all flex flex-col items-center gap-4 group",
+                         data.fuel === fName ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10 scale-105" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
+                       )}
+                     >
+                       <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform", f.bg)}>
+                         <f.icon size={24} className={f.color} />
+                       </div>
+                       <span className="font-black uppercase text-xs tracking-widest">{fName}</span>
+                     </button>
+                    );
+                  });
                })()}
             </div>
           </div>
@@ -480,6 +496,7 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
 
   const getDynamicVariant = (service: any) => {
     if (!data.carDetails.make || !data.carDetails.model || !data.carDetails.fuel) return null;
+    if (data.carDetails.fuel === "No Preference") return null;
     
     const variants = service.variants || [];
     const lowerMake = data.carDetails.make.toLowerCase();
@@ -487,27 +504,40 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
     const lowerFuel = data.carDetails.fuel.toLowerCase();
 
     // Priority matching logic
+    // 1. Exact Match (Make + Model + Fuel)
+    const exactMatch = variants.find((v: any) => 
+      v.make.toLowerCase() === lowerMake && 
+      v.model.toLowerCase() === lowerModel && 
+      v.fuel.toLowerCase() === lowerFuel
+    );
+    if (exactMatch) return exactMatch;
+
+    // 2. Model Specific Match (Make + Model, Generic Fuel)
+    const modelOnlyMatch = variants.find((v: any) => 
+      v.make.toLowerCase() === lowerMake && 
+      v.model.toLowerCase() === lowerModel && 
+      v.fuel.toLowerCase() === "all"
+    );
+    if (modelOnlyMatch) return modelOnlyMatch;
+
+    // 3. Fuel Specific Match (Make + Generic Model, Specific Fuel)
+    const fuelOnlyMatch = variants.find((v: any) => 
+      v.make.toLowerCase() === lowerMake && 
+      v.model.toLowerCase() === "all" && 
+      v.fuel.toLowerCase() === lowerFuel
+    );
+    if (fuelOnlyMatch) return fuelOnlyMatch;
+
+    // 4. Brand Match (Make + Generic Model + Generic Fuel)
+    const brandMatch = variants.find((v: any) => 
+      v.make.toLowerCase() === lowerMake && 
+      v.model.toLowerCase() === "all" && 
+      v.fuel.toLowerCase() === "all"
+    );
+    if (brandMatch) return brandMatch;
+
+    // 5. Broad Global Match (Wildcard)
     return variants.find((v: any) => 
-      v.make.toLowerCase() === lowerMake && 
-      v.model.toLowerCase() === lowerModel && 
-      v.fuel.toLowerCase() === lowerFuel
-    ) || 
-    variants.find((v: any) => 
-      v.make.toLowerCase() === lowerMake && 
-      v.model.toLowerCase() === lowerModel && 
-      v.fuel.toLowerCase() === "all"
-    ) ||
-    variants.find((v: any) => 
-      v.make.toLowerCase() === lowerMake && 
-      v.model.toLowerCase() === "all" && 
-      v.fuel.toLowerCase() === lowerFuel
-    ) ||
-    variants.find((v: any) => 
-      v.make.toLowerCase() === lowerMake && 
-      v.model.toLowerCase() === "all" && 
-      v.fuel.toLowerCase() === "all"
-    ) ||
-    variants.find((v: any) => 
       v.make.toLowerCase() === "all" && 
       v.fuel.toLowerCase() === lowerFuel
     );
@@ -774,7 +804,6 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
 
   const addToCalendar = () => {
     const title = `CarMechs: ${data.serviceType} Execution`;
-    // Format dates for Google Calendar (YYYYMMDDTHHMMSSZ)
     const datePart = data.appointmentDate.replace(/-/g, '');
     
     // Convert 12h time to 24h
@@ -783,14 +812,22 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
       let [hours, minutes] = time.split(':');
       if (modifier === 'PM' && hours !== '12') hours = String(parseInt(hours) + 12);
       if (modifier === 'AM' && hours === '12') hours = '00';
-      return hours.padStart(2, '0') + minutes.padStart(2, '0') + '00';
+      return { 
+        h: parseInt(hours), 
+        m: parseInt(minutes), 
+        str: hours.padStart(2, '0') + minutes.padStart(2, '0') + '00' 
+      };
     };
 
-    const startTime = parseTime(data.appointmentTime);
-    const endTime = parseTime(data.appointmentTime); // Assuming 2h window but keep same for simplicity or add 2h
+    const startInfo = parseTime(data.appointmentTime);
+    const startTime = startInfo.str;
+    
+    // End time is start time + 2 hours
+    const endH = (startInfo.h + 2) % 24;
+    const endTime = endH.toString().padStart(2, '0') + startInfo.m.toString().padStart(2, '0') + '00';
     
     const details = `Vehicle: ${data.carDetails.make} ${data.carDetails.model}\nRegistration: ${data.carDetails.plate}\nService: ${data.serviceType}\nTechnician: ${data.mechanicName || 'To be assigned'}\nBooking ID: ${bookingId}`;
-    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${datePart}T${startTime}/${datePart}T${startTime}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(data.location)}`;
+    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${datePart}T${startTime}/${datePart}T${endTime}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(data.location)}`;
     window.open(url, '_blank');
   };
 
@@ -823,30 +860,37 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
        </div>
 
        <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-          <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-xl space-y-6 text-left">
+          <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-xl space-y-6 text-left relative overflow-hidden">
              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
                <Calendar size={14} /> Schedule Analysis
              </div>
-             <div className="space-y-4">
+             <div className="space-y-4 relative z-10">
                 <div>
                    <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Deployment Date</div>
                    <div className="text-2xl font-black text-ink italic">{new Date(data.appointmentDate).toDateString()}</div>
                 </div>
                 <div>
                    <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Arrival Window</div>
-                   <div className="text-xl font-black text-primary italic uppercase tracking-tight">{data.appointmentTime} - {(() => {
-                      const [time, mod] = data.appointmentTime.split(' ');
-                      const [h, m] = time.split(':');
-                      const date = new Date();
-                      date.setHours(mod === 'PM' && h !== '12' ? parseInt(h) + 12 : (mod === 'AM' && h === '12' ? 0 : parseInt(h)));
-                      date.setMinutes(parseInt(m) + 60);
-                      let nh = date.getHours();
-                      const nmod = nh >= 12 ? 'PM' : 'AM';
-                      nh = nh % 12 || 12;
-                      return `${nh}:${m} ${nmod}`;
-                   })()}</div>
+                   <div className="text-xl font-black text-primary italic uppercase tracking-tight">
+                     {data.appointmentTime} - {(() => {
+                        const [time, mod] = data.appointmentTime.split(' ');
+                        const [h, m] = time.split(':');
+                        const date = new Date();
+                        date.setHours(mod === 'PM' && h !== '12' ? parseInt(h) + 12 : (mod === 'AM' && h === '12' ? 0 : parseInt(h)));
+                        date.setMinutes(parseInt(m) + 60);
+                        let nh = date.getHours();
+                        const nmod = nh >= 12 ? 'PM' : 'AM';
+                        nh = nh % 12 || 12;
+                        return `${nh}:${m} ${nmod}`;
+                     })()}
+                   </div>
+                </div>
+                <div className="pt-4 border-t border-slate-100">
+                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Assigned Identity</div>
+                   <div className="text-sm font-black text-ink uppercase tracking-tight">{data.fullName}</div>
                 </div>
              </div>
+             <Calendar size={120} className="absolute -right-12 -bottom-12 text-slate-100 opacity-20 rotate-12" strokeWidth={1} />
           </div>
 
           <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-white shadow-xl space-y-6 text-left relative overflow-hidden">
@@ -964,6 +1008,7 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
       newErrors.city = "Deployment hub (City) is required.";
     }
     
+    // Updated Validations for Year and Plate
     if (!data.carDetails.year) {
       newErrors.year = "Vehicle manufacturing year is required.";
     } else {
@@ -976,8 +1021,14 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
     
     if (!data.carDetails.plate) {
       newErrors.plate = "Number plate is mandatory for vehicle verification.";
-    } else if (!/^[A-Z]{2}\d{1,2}[A-Z]{1,2}\d{4}$/i.test(data.carDetails.plate.replace(/\s/g, ""))) {
-      newErrors.plate = "Number plate format seems invalid (e.g. WB02AA1234).";
+    } else {
+      const cleanPlate = data.carDetails.plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+      // Indian Plate Format: 2 letters, 2 numbers, 1-2 letters, 1-4 numbers
+      // More permissive regex: supports standard variations
+      const plateRegex = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{1,4}$/;
+      if (!plateRegex.test(cleanPlate)) {
+        newErrors.plate = "Invalid plate sequence. Expected format: MH01AB1234";
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -1017,8 +1068,12 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
                  <input 
                    type="text" 
                    value={data.carDetails.year}
-                   onChange={(e) => updateData({ ...data, carDetails: { ...data.carDetails, year: e.target.value } })}
-                   placeholder="2022"
+                   onChange={(e) => {
+                     const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                     updateData({ ...data, carDetails: { ...data.carDetails, year: val } });
+                   }}
+                   placeholder="YYYY"
+                   maxLength={4}
                    className={cn(
                      "w-full bg-white border-2 rounded-xl px-4 py-3 outline-none focus:border-primary transition-all font-bold text-xs",
                      errors.year ? "border-rose-300 bg-rose-50" : "border-white"
@@ -1064,18 +1119,26 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
                  {errors.fullName && <p className="text-[9px] font-black italic text-rose-500 uppercase tracking-tight px-1">{errors.fullName}</p>}
                </div>
                <div className="space-y-2 text-left">
-                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Phone Number</label>
-                 <input 
-                   type="tel" 
-                   value={data.phone}
-                   onChange={(e) => updateData({ ...data, phone: e.target.value })}
-                   placeholder="9876543210"
-                   className={cn(
-                     "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-bold",
-                     errors.phone ? "border-rose-300 bg-rose-50" : "border-slate-100"
-                   )}
-                 />
-                 {errors.phone && <p className="text-[9px] font-black italic text-rose-500 uppercase tracking-tight px-1">{errors.phone}</p>}
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Phone Number (+91 Recommended)</label>
+                  <div className="relative">
+                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm pointer-events-none">+91</span>
+                    <input 
+                      type="tel" 
+                      value={data.phone}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, "");
+                        if (val.startsWith("91") && val.length > 10) val = val.slice(2);
+                        val = val.slice(0, 10);
+                        updateData({ ...data, phone: val });
+                      }}
+                      placeholder="XXXXXXXXXX"
+                      className={cn(
+                        "w-full bg-slate-50 border-2 rounded-2xl pl-16 pr-6 py-4 outline-none focus:border-primary transition-all font-bold",
+                        errors.phone ? "border-rose-300 bg-rose-50" : "border-slate-100"
+                      )}
+                    />
+                  </div>
+                  {errors.phone && <p className="text-[9px] font-black italic text-rose-500 uppercase tracking-tight px-1">{errors.phone}</p>}
                </div>
              </div>
 
@@ -1461,26 +1524,29 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-       let tid = "TID_CASH_" + Math.random().toString(36).substring(2, 12).toUpperCase();
+       let tid = "";
        let payStatus = "pending";
 
-       if (paymentMethod !== 'cash') {
-         // Real Gateway Integration
-         const payResponse = await initializePayment({
-           amount: data.price,
-           currency: 'INR',
-           receipt: `receipt_${data.carDetails.plate}_${Date.now()}`,
-           customerName: data.fullName,
-           customerEmail: data.email,
-           customerPhone: data.phone
-         }, paymentMethod);
+       // Real Gateway Integration
+       const payResponse = await initializePayment({
+         amount: data.price,
+         currency: 'INR',
+         receipt: `rec_${Date.now()}`,
+         customerName: data.fullName,
+         customerEmail: data.email,
+         customerPhone: data.phone
+       }, paymentMethod);
 
-         if (payResponse.status !== 'success') {
-           throw new Error(payResponse.status === 'cancelled' ? "Payment Cancelled by User" : "Payment Authorization Failed");
+       if (payResponse.status !== 'success') {
+         if (payResponse.status === 'cancelled') {
+           toast.info("Payment cycle aborted by user.");
+           return;
          }
-         tid = payResponse.id;
-         payStatus = "paid";
+         throw new Error("Payment Authorization Failed. Gateway signal lost.");
        }
+       
+       tid = payResponse.id;
+       payStatus = "paid";
        
        setTransactionId(tid);
 
@@ -1495,28 +1561,27 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
          updatedAt: serverTimestamp()
        });
 
-       // Trigger Server-Side Email Notification
-        // Send confirmation emails
-        try {
-          await sendConfirmationEmail(
-            data.email, 
-            data.fullName, 
-            bookingRef.id, 
-            data.serviceType, 
-            data.appointmentDate, 
-            data.appointmentTime, 
-            data.cart, 
-            data.price
-          );
-          await sendNewBookingAlert({ ...data, id: bookingRef.id });
-        } catch (mailErr) {
-          console.warn("Mail service dispatch failed:", mailErr);
-        }
+       // Trigger Notification
+       try {
+         await sendConfirmationEmail(
+           data.email, 
+           data.fullName, 
+           bookingRef.id, 
+           data.serviceType, 
+           data.appointmentDate, 
+           data.appointmentTime, 
+           data.cart, 
+           data.price
+         );
+         await sendNewBookingAlert({ ...data, id: bookingRef.id });
+       } catch (mailErr) {
+         console.warn("Notification dispatch failed:", mailErr);
+       }
 
        setIsSuccess(true);
     } catch (err: any) {
        console.error("Critical Transaction Error:", err);
-       toast.error(err.message || "Transaction Pulse Failed. The gateway rejected the authorization.");
+       toast.error(err.message || "Transaction Pulse Failed. Gateway rejected the authorization.");
     } finally {
        setIsSubmitting(false);
     }

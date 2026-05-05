@@ -178,12 +178,35 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "status", "priority", "createdAt"]
+    },
+    "carBrand": {
+      "title": "Car Brand",
+      "description": "Represents a car make with its models and logo.",
+      "type": "object",
+      "properties": {
+        "logo": { "type": "string", "description": "URL to brand logo" },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "logo": { "type": "string" },
+              "fuelTypes": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
     }
   },
   "firestore": {
     "/bookings/{bookingId}": {
       "schema": "booking",
       "description": "Store for all car service bookings."
+    },
+    "/carBrands/{brandName}": {
+      "schema": "carBrand",
+      "description": "Database of car makes and their associated models."
     },
     "/services/{serviceId}": {
       "schema": "service",

@@ -51,7 +51,10 @@ function ReviewForm({ serviceId }: { serviceId: string }) {
       toast.info("Operational Recall: You must be signed in to submit intelligence.");
       return;
     }
-    if (!comment.trim()) return;
+    if (!comment.trim()) {
+      toast.warning("Incomplete Intelligence: Field notes (comment) cannot be null.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -1075,7 +1078,7 @@ function CarPicker({ carData, selectedCar, setSelectedCar, onClose }: any) {
               </div>
             )}
 
-            {step === 3 && ["Petrol", "Diesel", "CNG", "Electric"].map(fuel => (
+            {step === 3 && ["Petrol", "Diesel", "CNG", "Electric", "No Preference"].map(fuel => (
               <button
                 key={fuel}
                 onClick={() => { setSelectedCar({ ...selectedCar, fuel }); onClose(); }}
@@ -1083,7 +1086,9 @@ function CarPicker({ carData, selectedCar, setSelectedCar, onClose }: any) {
                   "p-6 rounded-2xl transition-all font-bold text-lg flex items-center justify-between group border-2",
                   selectedCar.fuel === fuel 
                     ? "bg-primary border-primary text-white shadow-xl shadow-primary/20 scale-[1.02]" 
-                    : "bg-slate-50 text-ink border-transparent hover:border-slate-200"
+                    : fuel === "No Preference" 
+                      ? "bg-slate-100/50 text-slate-400 border-dashed border-slate-200 hover:border-slate-300"
+                      : "bg-slate-50 text-ink border-transparent hover:border-slate-200"
                 )}
               >
                 <div className="flex items-center gap-4">

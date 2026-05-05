@@ -3015,8 +3015,10 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
       return;
     }
 
+    const logoUrl = modelName.length > 0 ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(modelName)}&backgroundColor=334155&fontSize=45&bold=true` : "";
+
     await updateDoc(doc(db, "carBrands", brand), { 
-      models: [...models, { name: modelName, logo: "", fuelTypes: ["Petrol", "Diesel"] }] 
+      models: [...models, { name: modelName, logo: logoUrl, fuelTypes: ["Petrol", "Diesel"] }] 
     });
     setNewModel({ ...newModel, [brand]: "" });
   };
@@ -3024,6 +3026,49 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
   const handleDeleteModel = async (brand: string, index: number) => {
     const updatedModels = (carData[brand]?.models || []).filter((_, i) => i !== index);
     await updateDoc(doc(db, "carBrands", brand), { models: updatedModels });
+  };
+
+  const handleGlobalAutoRepair = async () => {
+    let repairedCount = 0;
+    const batchWork = { ...carData };
+    
+    toast.info("Commencing global visual synchronization...");
+
+    for (const [brand, data] of Object.entries(batchWork)) {
+      let brandChanged = false;
+      const brandData = { ...data };
+      
+      // Repair Brand Logo
+      if (!brandData.logo || brandData.logo === "") {
+        brandData.logo = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(brand)}&backgroundColor=0f172a&fontSize=45&bold=true&chars=1`;
+        brandChanged = true;
+      }
+      
+      // Repair Model Logos
+      const updatedModels = [...(brandData.models || [])];
+      updatedModels.forEach((model: any, idx: number) => {
+        if (!model.logo || model.logo === "") {
+          model.logo = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(model.name)}&backgroundColor=334155&fontSize=45&bold=true`;
+          brandChanged = true;
+        }
+      });
+      
+      if (brandChanged) {
+        brandData.models = updatedModels;
+        try {
+          await updateDoc(doc(db, "carBrands", brand), brandData);
+          repairedCount++;
+        } catch (err) {
+          console.error(`Repair failure for ${brand}:`, err);
+        }
+      }
+    }
+    
+    if (repairedCount > 0) {
+      toast.success(`Visual Synchronization Complete: ${repairedCount} brands re-mapped with generated identity tokens.`);
+    } else {
+      toast.info("Database Integrity Verified: All visual nodes are active.");
+    }
   };
 
   return (
@@ -3036,15 +3081,25 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
             </div>
             Universal Car Database
           </div>
-          <div className="relative group/search w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 transition-colors group-focus-within/search:text-primary" size={14} />
-            <input 
-              type="text"
-              placeholder="SEARCH BRANDS/MODELS..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-black/40 border border-white/5 rounded-xl pl-10 pr-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-white outline-none focus:border-primary/50 transition-all shadow-inner placeholder:text-neutral-700"
-            />
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleGlobalAutoRepair}
+              className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase text-accent-red hover:bg-accent-red hover:text-white transition-all flex items-center gap-2"
+              title="Auto-generate missing logos"
+            >
+              <Zap size={14} />
+              Repair Visuals
+            </button>
+            <div className="relative group/search w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 transition-colors group-focus-within/search:text-primary" size={14} />
+              <input 
+                type="text"
+                placeholder="SEARCH BRANDS/MODELS..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-black/40 border border-white/5 rounded-xl pl-10 pr-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-white outline-none focus:border-primary/50 transition-all shadow-inner placeholder:text-neutral-700"
+              />
+            </div>
           </div>
         </h3>
         
