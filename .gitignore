@@ -1,0 +1,43 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+dist
+build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vite
+*.local
+
+# Firebase
+.firebase
+firestore.indexes.json
+firestore.rules
+firebase-debug.log*
+ui-debug.log*
+
+# IDEs
+.idea
+.vscode
+*.swp
+*.swo

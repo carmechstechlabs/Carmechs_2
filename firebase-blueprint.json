@@ -1,0 +1,217 @@
+{
+  "entities": {
+    "booking": {
+      "title": "Booking",
+      "description": "Represents a service booking request from a customer.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string", "description": "Customer's full name" },
+        "phone": { "type": "string", "description": "Customer's phone number" },
+        "email": { "type": "string", "format": "email", "description": "Customer's email address" },
+        "carDetails": { 
+          "type": "object", 
+          "properties": {
+            "make": { "type": "string" },
+            "model": { "type": "string" },
+            "fuel": { "type": "string" }
+          },
+          "description": "Specific vehicle details" 
+        },
+        "serviceId": { "type": "string", "description": "ID of the selected service" },
+        "serviceType": { "type": "string", "description": "Name of the service requested" },
+        "mechanicId": { "type": "string", "description": "Assigned or preferred technician ID" },
+        "appointmentDate": { "type": "string", "format": "date", "description": "Selected service date" },
+        "appointmentTime": { "type": "string", "description": "Selected time slot" },
+        "price": { "type": "number", "description": "Agreed price at time of booking" },
+        "message": { "type": "string", "description": "Additional details or concerns" },
+        "notes": { "type": "string", "description": "Internal admin notes" },
+        "status": { 
+          "type": "string", 
+          "enum": ["pending", "confirmed", "in-progress", "completed", "cancelled"],
+          "description": "Current status of the booking"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the booking was created" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the booking was last updated" }
+      },
+      "required": ["fullName", "phone", "serviceType", "status", "createdAt"]
+    },
+    "technician": {
+      "title": "Technician",
+      "description": "A technician who performs car services.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "expertise": { "type": "string" },
+        "bio": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["available", "busy", "off"] },
+        "experience": { "type": "string", "description": "e.g., '10+ Years'" },
+        "specialties": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "status"]
+    },
+    "service": {
+      "title": "Service",
+      "description": "Details about a specific service offering.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "excerpt": { "type": "string", "description": "Short code snippet or one-liner description" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "icon": { "type": "string", "description": "Lucide icon name" },
+        "notes": { "type": "string", "description": "Internal admin notes" },
+        "imageUrl": { "type": "string", "description": "URL of the service image" },
+        "features": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "Specific list of items included in the service"
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "make": { "type": "string" },
+              "model": { "type": "string" },
+              "fuel": { "type": "string" },
+              "price": { "type": "number" },
+              "description": { "type": "string", "description": "Variant specific description" }
+            }
+          },
+          "description": "Price overrides for specific car configurations"
+        },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userId": { "type": "string" },
+              "userName": { "type": "string" },
+              "rating": { "type": "number" },
+              "comment": { "type": "string" },
+              "createdAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          "description": "Customer feedback for the service"
+        }
+      },
+      "required": ["title", "description", "price", "isActive"]
+    },
+    "config": {
+      "title": "Configuration Document",
+      "description": "General settings and dynamic lists (UI config, car models, etc).",
+      "type": "object",
+      "properties": {
+        "brands": { "type": "object", "description": "Map of car brand to array of models" },
+        "logoText": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "supportPhone": { "type": "string" },
+        "whatsappNumber": { "type": "string", "description": "Dedicated WhatsApp contact number" },
+        "whatsappEnabled": { "type": "boolean", "description": "Toggle WhatsApp button visibility" },
+        "seoTitle": { "type": "string", "description": "Main browser tab title for SEO" },
+        "seoDescription": { "type": "string", "description": "Meta description for search engines" },
+        "seoKeywords": { "type": "string", "description": "Comma-separated search keywords" },
+        "referralRewardAmount": { "type": "number", "description": "Default reward for successful referral" }
+      }
+    },
+    "user": {
+      "title": "User Profile",
+      "description": "Basic account info for customers.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "referralCode": { "type": "string", "description": "Unique referral code for this user" },
+        "referredBy": { "type": "string", "description": "User ID of the person who referred this user" },
+        "bonusBalance": { "type": "number", "description": "Total reward points or credits earned" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "fullName", "role", "createdAt"]
+    },
+    "referral": {
+      "title": "Referral Record",
+      "description": "Track referral conversions.",
+      "type": "object",
+      "properties": {
+        "referrerId": { "type": "string" },
+        "referredUserId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "successful"] },
+        "rewardAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["referrerId", "referredUserId", "status", "createdAt"]
+    },
+    "ticket": {
+      "title": "Support Ticket",
+      "description": "Customer support requests.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in-progress", "resolved", "closed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "subject", "description", "status", "priority", "createdAt"]
+    },
+    "task": {
+      "title": "Admin Task",
+      "description": "Internal tasks for administrators.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "dueDate": { "type": "string", "format": "date-time", "description": "Target completion date" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "status", "priority", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/bookings/{bookingId}": {
+      "schema": "booking",
+      "description": "Store for all car service bookings."
+    },
+    "/services/{serviceId}": {
+      "schema": "service",
+      "description": "Catalog of available services."
+    },
+    "/config/{configId}": {
+      "schema": "config",
+      "description": "Global UI and theme settings, including car hub data."
+    },
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Customer profiles."
+    },
+    "/tickets/{ticketId}": {
+      "schema": "ticket",
+      "description": "Support tickets collection for customer issues."
+    },
+    "/tasks/{taskId}": {
+      "schema": "task",
+      "description": "Internal administrative task management."
+    },
+    "/referrals/{referralId}": {
+      "schema": "referral",
+      "description": "Records of referral rewards and statuses."
+    },
+    "/technicians/{technicianId}": {
+      "schema": "technician",
+      "description": "Store for technician profiles and availability."
+    }
+  }
+}

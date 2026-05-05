@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,200;1,300;1,400;1,500;1,600;1,700;1,800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  
+  --color-bg-main: #FFFFFF;
+  --color-bg-soft: #F8FAFC;
+  --color-ink: #0F172A;
+  --color-text-muted: #64748B;
+  
+  --color-primary: #6366F1;
+  --color-primary-soft: #EEF2FF;
+  --color-secondary: #EC4899;
+  --color-secondary-soft: #FDF2F8;
+  --color-accent: #10B981;
+  --color-accent-soft: #ECFDF5;
+  --color-warning: #F59E0B;
+  
+  --color-border-light: #E2E8F0;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans antialiased text-ink bg-bg-main;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-extrabold tracking-tight text-ink;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/70 backdrop-blur-md border border-white/20;
+  }
+  
+  .vibrant-gradient {
+    @apply bg-gradient-to-br from-primary via-secondary to-warning;
+  }
+  
+  .bento-card {
+    @apply bg-white rounded-3xl p-8 shadow-xl shadow-slate-200/50 border border-slate-100 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1;
+  }
+}
+
