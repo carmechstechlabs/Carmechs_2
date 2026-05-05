@@ -31,6 +31,11 @@ export default function Contact() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const isFormValid = formData.fullName.trim().length >= 3 && 
+                     /^\d{10}$/.test(formData.phone.replace(/[\s-]/g, "")) && 
+                     (!formData.email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) && 
+                     formData.carModel.trim().length > 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -146,7 +151,11 @@ export default function Contact() {
                         <input
                           type="text"
                           value={formData.fullName}
-                          onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, fullName: e.target.value });
+                            if (errors.fullName) validate();
+                          }}
+                          onBlur={validate}
                           placeholder="Your happy name"
                           className={cn(
                             "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-primary/5",
@@ -160,7 +169,11 @@ export default function Contact() {
                         <input
                           type="tel"
                           value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, phone: e.target.value });
+                            if (errors.phone) validate();
+                          }}
+                          onBlur={validate}
                           placeholder="+91 Phone"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-secondary/5",
@@ -177,7 +190,11 @@ export default function Contact() {
                         <input
                           type="text"
                           value={formData.carModel}
-                          onChange={(e) => setFormData({ ...formData, carModel: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, carModel: e.target.value });
+                            if (errors.carModel) validate();
+                          }}
+                          onBlur={validate}
                           placeholder="Make/Model"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-accent/5",
@@ -191,7 +208,11 @@ export default function Contact() {
                         <input
                           type="email"
                           value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, email: e.target.value });
+                            if (errors.email) validate();
+                          }}
+                          onBlur={validate}
                           placeholder="your@email.com"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-primary/5",
@@ -233,8 +254,8 @@ export default function Contact() {
                     </div>
 
                     <button 
-                      disabled={isSubmitting}
-                      className="w-full py-6 rounded-2xl bg-primary text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-4 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 disabled:opacity-50 active:scale-95 group/submit"
+                      disabled={isSubmitting || !isFormValid}
+                      className="w-full py-6 rounded-2xl bg-primary text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-4 transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 disabled:opacity-30 disabled:grayscale disabled:scale-100 active:scale-95 group/submit"
                     >
                       {isSubmitting ? (
                         <>

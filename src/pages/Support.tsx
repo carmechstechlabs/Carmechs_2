@@ -263,6 +263,20 @@ export default function Support() {
       </main>
 
       <Footer />
+
+      {/* Persistent WhatsApp Node */}
+      <a 
+        href={`https://wa.me/${config.whatsapp || "919831231431"}`}
+        target="_blank"
+        rel="noreferrer"
+        className="fixed bottom-8 right-8 w-16 h-16 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl shadow-emerald-500/40 hover:scale-110 active:scale-95 transition-all z-[100] group"
+      >
+         <MessageSquare size={28} fill="currentColor" />
+         <div className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-20 pointer-events-none" />
+         <span className="absolute right-full mr-4 bg-white text-ink border border-neutral-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-2xl opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 whitespace-nowrap pointer-events-none">
+          Technical Deployment HQ
+        </span>
+      </a>
     </div>
   );
 }

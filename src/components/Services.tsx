@@ -532,7 +532,7 @@ export default function Services() {
                 onClick={() => setExpandedId(isExpanded ? null : service.id)}
                 className={cn(
                   "bento-card group flex flex-col hover:shadow-2xl hover:shadow-primary/20 p-0 overflow-hidden cursor-pointer transition-all duration-500 border-2",
-                  isExpanded ? "border-primary lg:col-span-2 shadow-2xl scale-[1.01] hover:scale-[1.01]" : "border-transparent shadow-xl shadow-slate-100"
+                  isExpanded ? "border-primary lg:col-span-2 shadow-2xl scale-[1.01] hover:scale-[1.01] ring-8 ring-primary/5 bg-white" : "border-transparent shadow-xl shadow-slate-100 bg-slate-50/5"
                 )}
               >
                 <div className={cn("flex flex-col h-full", isExpanded && "md:flex-row")}>
@@ -622,15 +622,16 @@ export default function Services() {
 
                     {!isExpanded && (
                       <motion.button 
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
+                        whileHover={{ scale: 1.05, x: 5 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setExpandedId(service.id);
                         }}
-                        className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-1 hover:gap-2 transition-all mb-6 bg-primary-soft/50 py-2 px-4 rounded-xl w-fit"
+                        className="text-[11px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-3 hover:gap-4 transition-all mb-6 bg-primary-soft py-4 px-6 rounded-2xl w-full sm:w-fit border border-primary/10 shadow-lg shadow-primary/5 hover:bg-primary hover:text-white group/btn"
                       >
-                        Read Full Manifest <ChevronRight size={12} />
+                        Read Full Manifest 
+                        <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
                       </motion.button>
                     )}
 

@@ -12,6 +12,19 @@ export default function Hero() {
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-bg-soft pt-32 pb-20">
+      {/* Dynamic Background Image */}
+      {config.heroImage && (
+        <div className="absolute inset-0 z-0">
+          <img 
+            src={config.heroImage} 
+            alt="" 
+            className="w-full h-full object-cover opacity-10 grayscale hover:grayscale-0 transition-all duration-1000"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-bg-soft via-transparent to-bg-soft" />
+        </div>
+      )}
+
       {/* Playful Background Elements */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute top-20 right-20 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse" />

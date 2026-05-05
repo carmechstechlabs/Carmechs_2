@@ -17,7 +17,8 @@ import {
   Edit2,
   AlertCircle,
   Fuel,
-  Droplets
+  Droplets,
+  Globe
 } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc } from "firebase/firestore";
@@ -165,11 +166,20 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
 }
 
 function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void, onBack: () => void, data: string, updateData: (l: string) => void }) {
-  const branches = [
-    { id: "mumbai-1", name: "Main Workshop - Mumbai Central", address: "Plot 12, Senapati Bapat Marg", region: "South Mumbai", phone: "+91 98312 31431" },
-    { id: "mumbai-2", name: "Apex Service Hub - Bandra", address: "Link Road, Near Metro Pillars", region: "West Mumbai", phone: "+91 98312 31432" },
-    { id: "mumbai-3", name: "Elite Garage - Thane", address: "Eastern Express Highway", region: "Central Suburbs", phone: "+91 98312 31433" }
-  ];
+  const [branches, setBranches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    return onSnapshot(query(collection(db, "locations"), where("isActive", "==", true)), (snap) => {
+      setBranches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (err) => {
+      console.warn("Location registry sync error:", err.message);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) return <BookingFormSkeleton />;
 
   return (
     <motion.div 
@@ -192,7 +202,7 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
               <ShieldCheck size={24} />
             </div>
             <div className="flex-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">{b.region}</div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">{b.region || b.city}</div>
               <h4 className="text-lg font-black text-ink uppercase italic tracking-tight mb-2">{b.name}</h4>
               <p className="text-xs font-medium text-slate-500 flex items-center gap-2">
                 <Calendar size={12} /> {b.address}
@@ -201,6 +211,14 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
             <ChevronRight size={20} className="text-slate-200 self-center" />
           </button>
         ))}
+        {branches.length === 0 && (
+          <div className="py-20 text-center border-4 border-dashed border-slate-50 rounded-[3rem] space-y-4">
+             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
+                <Globe size={32} />
+             </div>
+             <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.3em] italic">No active tactical hubs detected in registry</p>
+          </div>
+        )}
       </div>
       <button onClick={onBack} className="w-full py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-ink">Change Vehicle</button>
     </motion.div>

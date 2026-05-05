@@ -3369,7 +3369,7 @@ function TasksTab() {
                     {task.priority === "high" && <AlertCircle size={10} className="animate-pulse" />}
                     {task.priority === "medium" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
                     {task.priority === "low" && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-                    {task.priority}_PRIORITY
+                    PRIORITY: {task.priority.toUpperCase()}
                   </span>
                     {task.dueDate && (
                       <span className="flex items-center gap-1.5 text-[9px] font-mono font-black text-text-dim italic">
@@ -4797,7 +4797,9 @@ function SEOTab() {
 function LocationsTab() {
   const [locations, setLocations] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [newLoc, setNewLoc] = useState({ name: "", address: "", city: "", phone: "", isActive: true });
+  const [newLoc, setNewLoc] = useState({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
+
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     return onSnapshot(collection(db, "locations"), (snap) => {
@@ -4810,10 +4812,28 @@ function LocationsTab() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, "locations"), { ...newLoc, createdAt: serverTimestamp() });
+      if (editingId) {
+        await updateDoc(doc(db, "locations", editingId), { ...newLoc, updatedAt: serverTimestamp() });
+        setEditingId(null);
+      } else {
+        await addDoc(collection(db, "locations"), { ...newLoc, createdAt: serverTimestamp() });
+      }
       setShowAdd(false);
-      setNewLoc({ name: "", address: "", city: "", phone: "", isActive: true });
+      setNewLoc({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
     } catch (err) { console.error(err); }
+  };
+
+  const handleEdit = (loc: any) => {
+    setNewLoc({ 
+      name: loc.name, 
+      address: loc.address || "", 
+      city: loc.city || "", 
+      region: loc.region || "", 
+      phone: loc.phone || "", 
+      isActive: loc.isActive 
+    });
+    setEditingId(loc.id);
+    setShowAdd(true);
   };
 
   const toggleLoc = async (id: string, current: boolean) => {
@@ -4834,7 +4854,13 @@ function LocationsTab() {
              <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">Manage active service hubs and deployment nodes</p>
           </div>
           <button 
-             onClick={() => setShowAdd(!showAdd)}
+             onClick={() => {
+               if (showAdd) {
+                 setEditingId(null);
+                 setNewLoc({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
+               }
+               setShowAdd(!showAdd);
+             }}
              className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20"
           >
              {showAdd ? "Cancel" : "+ New Hub"}
@@ -4868,6 +4894,16 @@ function LocationsTab() {
                    required
                 />
              </div>
+             <div className="space-y-2">
+                <label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Hub Region</label>
+                <input 
+                   placeholder="South Mumbai" 
+                   value={newLoc.region}
+                   onChange={e => setNewLoc({...newLoc, region: e.target.value})}
+                   className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-primary"
+                   required
+                />
+             </div>
              <div className="md:col-span-2 space-y-2">
                 <label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Tactical Address</label>
                 <input 
@@ -4886,7 +4922,9 @@ function LocationsTab() {
                    className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-primary"
                 />
              </div>
-             <button className="md:col-span-2 py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest mt-6">Initialize Hub</button>
+             <button className="md:col-span-2 py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest mt-6">
+                {editingId ? "Update Tactical Node" : "Initialize Hub"}
+             </button>
           </motion.form>
        )}
 
@@ -4898,6 +4936,9 @@ function LocationsTab() {
                       <Globe size={24} />
                    </div>
                    <div className="flex gap-2">
+                      <button onClick={() => handleEdit(loc)} className="p-1.5 rounded-lg bg-white/5 text-primary hover:bg-primary-soft transition-all">
+                         <Edit2 size={16} />
+                      </button>
                       <button onClick={() => toggleLoc(loc.id, loc.isActive)} className={cn("px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest", loc.isActive ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400")}>
                          {loc.isActive ? "ACTIVE" : "OFFLINE"}
                       </button>
@@ -4909,10 +4950,12 @@ function LocationsTab() {
                 <h3 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">{loc.name}</h3>
                 <div className="space-y-3">
                    <p className="text-xs text-text-dim leading-relaxed">{loc.address}</p>
-                   <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest text-primary">
-                      <span>{loc.city}</span>
-                      <span className="text-white/20">•</span>
-                      <span>{loc.phone}</span>
+                   <div className="flex flex-wrap gap-4 text-[10px] font-black uppercase tracking-widest text-primary font-mono">
+                      <span className="bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/10">{loc.city}</span>
+                      <span className="opacity-30">•</span>
+                      <span className="text-white/40">{loc.region}</span>
+                      <span className="opacity-30">•</span>
+                      <span className="text-white/80">{loc.phone}</span>
                    </div>
                 </div>
              </div>
