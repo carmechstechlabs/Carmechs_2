@@ -13,11 +13,11 @@ export default function Hero() {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-bg-soft pt-32 pb-20">
       {/* Dynamic Background Image */}
-      {config.heroImage && (
+      {(config.heroImage || "https://images.unsplash.com/photo-1486006920555-c77dcf18193c?auto=format&fit=crop&q=80&w=2000") && (
         <div className="absolute inset-0 z-0">
           <img 
-            src={config.heroImage} 
-            alt="" 
+            src={config.heroImage || "https://images.unsplash.com/photo-1486006920555-c77dcf18193c?auto=format&fit=crop&q=80&w=2000"} 
+            alt="Premium Car Service" 
             className="w-full h-full object-cover opacity-10 grayscale hover:grayscale-0 transition-all duration-1000"
             referrerPolicy="no-referrer"
           />
@@ -45,14 +45,14 @@ export default function Hero() {
             </div>
 
             <h1 className="text-6xl md:text-8xl font-black text-ink leading-[1.1] mb-8 font-display tracking-tight">
-              {config.heroTitle || "CAR CARE"} <br />
+              {config.heroTitle || "HONEST PRICING"} <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
-                {config.heroSubtitle || "SERVICE REIMAGINED"}
+                {config.heroSubtitle || "EXPERT MECHANICS"}
               </span>
             </h1>
 
             <p className="text-xl text-text-muted max-w-lg mb-12 font-medium leading-relaxed">
-              Experience the future of automotive care with transparent pricing, certified experts, and a touch of magic. Your car deserves the best, and so do you!
+              CarMechs delivers premium doorstep car care with absolute transparency. Certified experts, genuine spares, and zero hidden costs.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-6 items-stretch sm:items-center">

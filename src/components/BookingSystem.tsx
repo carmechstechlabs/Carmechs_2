@@ -302,9 +302,26 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
     });
   }, []);
 
-  const makes = Object.keys(carHub).filter(m => m.toLowerCase().includes(search.toLowerCase()));
+  const searchLower = search.toLowerCase();
+  
+  // Simultaneous filtering
+  const searchResults = search.length > 1 ? Object.entries(carHub).flatMap(([brand, details]: [string, any]) => 
+    details.models
+      .filter((model: any) => 
+        brand.toLowerCase().includes(searchLower) || 
+        model.name.toLowerCase().includes(searchLower)
+      )
+      .map((model: any) => ({
+        brand,
+        brandLogo: details.logo,
+        modelName: model.name,
+        modelLogo: model.logo
+      }))
+  ) : [];
+
+  const makes = Object.keys(carHub).filter(m => m.toLowerCase().includes(searchLower));
   const selectedBrand = data.make ? carHub[data.make] : null;
-  const models = selectedBrand ? selectedBrand.models.filter((m: any) => m.name.toLowerCase().includes(search.toLowerCase())) : [];
+  const models = selectedBrand ? selectedBrand.models.filter((m: any) => m.name.toLowerCase().includes(searchLower)) : [];
 
   return (
     <motion.div 
@@ -320,14 +337,48 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
          </div>
          <input 
            type="text" 
-           placeholder={step === 1 ? "Search by Brand (e.g. BMW, Tesla)..." : "Search Model (e.g. Model 3, X5)..."}
+           placeholder="Search across all brands & models..."
            value={search}
            onChange={(e) => setSearch(e.target.value)}
            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-16 pr-6 py-5 outline-none focus:border-primary transition-all font-bold text-ink"
          />
        </div>
 
-       {step === 1 && (
+       {search.length > 1 && searchResults.length > 0 && (
+         <div className="space-y-4">
+           <div className="text-[10px] font-black uppercase tracking-widest text-primary ml-1">Search Results</div>
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-8">
+             {searchResults.map((res: any, idx: number) => (
+               <button
+                 key={`${res.brand}-${res.modelName}-${idx}`}
+                 onClick={() => {
+                   updateData({ 
+                     ...data, 
+                     make: res.brand, 
+                     brandLogo: res.brandLogo,
+                     model: res.modelName,
+                     modelLogo: res.modelLogo || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(res.modelName)}&backgroundColor=334155&fontSize=45&bold=true`
+                   });
+                   setStep(3); // Go to fuel selection
+                   setSearch("");
+                 }}
+                 className="flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-primary hover:bg-white transition-all group text-left"
+               >
+                 <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 p-2 flex items-center justify-center shrink-0">
+                    {res.brandLogo ? <img src={res.brandLogo} alt="" className="w-full h-full object-contain" /> : <Car size={20} className="text-slate-200" />}
+                 </div>
+                 <div>
+                   <div className="text-[10px] font-black uppercase text-primary tracking-widest leading-none mb-1">{res.brand}</div>
+                   <div className="text-sm font-black text-ink">{res.modelName}</div>
+                 </div>
+                 <ChevronRight size={16} className="ml-auto text-slate-300 group-hover:text-primary transition-colors" />
+               </button>
+             ))}
+           </div>
+         </div>
+       )}
+
+       {search.length <= 1 && step === 1 && (
          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 pb-8">
             {makes.map(m => (
               <button 
@@ -575,8 +626,7 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
             const variant = getDynamicVariant(s);
             const finalPrice = variant ? variant.price : s.price;
             const isSelected = cart.find((item: any) => item.id === s.id);
-            
-            return (
+                       return (
               <div key={s.id} className="space-y-2">
                 <button 
                   onClick={() => toggleService(s)}
@@ -596,9 +646,13 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
                       <div className="font-black text-ink uppercase tracking-tight">{s.title}</div>
                       <div className="flex items-center gap-2">
                         <div className={cn("text-[10px] font-bold uppercase tracking-widest", variant || isSelected ? "text-primary" : "text-slate-400")}>
-                          {variant ? `Vehicle Price Applied: ₹${finalPrice}` : `Starting from ₹${s.price}`}
+                          {variant ? `Vehicle Price Applied: ₹${finalPrice}` : `Generic Price Applied: ₹${s.price}`}
                         </div>
-                        {variant && <Zap size={10} className="text-primary animate-pulse" />}
+                        {variant ? (
+                          <Zap size={10} className="text-primary animate-pulse" />
+                        ) : (
+                          <div className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter">Default Fallback</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -609,15 +663,19 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
                     <Check size={14} strokeWidth={3} />
                   </div>
                 </button>
-                {/* Variant Selector if service has variants and is selected */}
+                {/* Variant Selector */}
                 {s.variants && s.variants.length > 0 && isSelected && (
                   <div className="pl-16 space-y-3 pb-4">
-                    <div className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Manual Calibration (Optional)</div>
+                    <div className="flex items-center justify-between mr-6">
+                      <div className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">Manual Model Calibration</div>
+                      {!variant && <div className="text-[8px] font-bold text-amber-500 uppercase tracking-tighter animate-pulse">Specific Specs Missing • Review Fallback</div>}
+                    </div>
                     <div className="flex flex-wrap gap-2">
-                       {s.variants.slice(0, 4).map((v: any, vIdx: number) => {
+                       {s.variants.map((v: any, vIdx: number) => {
                          const vMatches = v.make.toLowerCase() === data.carDetails.make.toLowerCase() && 
-                                          (v.model.toLowerCase() === 'all' || v.model.toLowerCase() === data.carDetails.model.toLowerCase()) &&
-                                          (v.fuel.toLowerCase() === 'all' || v.fuel.toLowerCase() === data.carDetails.fuel.toLowerCase());
+                                           (v.model.toLowerCase() === 'all' || v.model.toLowerCase() === data.carDetails.model.toLowerCase()) &&
+                                           (v.fuel.toLowerCase() === 'all' || v.fuel.toLowerCase() === data.carDetails.fuel.toLowerCase());
+                         const isChosen = cart.find((item: any) => item.id === s.id)?.price === v.price;
                          return (
                            <button 
                              key={vIdx}
@@ -628,7 +686,8 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
                              }}
                              className={cn(
                                "px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
-                               vMatches ? "bg-primary/10 border-primary/20 text-primary" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                               isChosen ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" : 
+                               vMatches ? "bg-primary/5 border-primary/10 text-primary" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
                              )}
                            >
                              {v.make} {v.model === 'all' ? 'Models' : v.model} • {v.fuel} • ₹{v.price}
@@ -666,12 +725,35 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
 function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
   const [mechanics, setMechanics] = useState<any[]>([]);
   const [selectedMechanic, setSelectedMechanic] = useState<any>(null);
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  
   const dates = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(offset => {
     const d = new Date();
     d.setDate(d.getDate() + offset);
     return d;
   });
-  const times = ["09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"];
+
+  const generateTimes = () => {
+    const times = [];
+    for (let hour = 9; hour <= 18; hour++) {
+      for (let min of ["00", "30"]) {
+        if (hour === 18 && min === "30") break;
+        const h = hour > 12 ? hour - 12 : hour;
+        const ampm = hour >= 12 ? "PM" : "AM";
+        times.push(`${h.toString().padStart(2, '0')}:${min} ${ampm}`);
+      }
+    }
+    return times;
+  };
+
+  const times = generateTimes();
+
+  useEffect(() => {
+    if (!data.appointmentDate) return;
+    return onSnapshot(query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate)), (snap) => {
+      setBookedSlots(snap.docs.map(doc => doc.data().appointmentTime));
+    });
+  }, [data.appointmentDate]);
 
   useEffect(() => {
     return onSnapshot(collection(db, "technicians"), (snap) => {
@@ -708,7 +790,7 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
                return (
                   <button 
                     key={i}
-                    onClick={() => updateData({ ...data, appointmentDate: dateStr })}
+                    onClick={() => updateData({ ...data, appointmentDate: dateStr, appointmentTime: "" })}
                     className={cn(
                       "p-3 rounded-2xl border-2 transition-all group flex flex-col items-center justify-center relative",
                       data.appointmentDate === dateStr ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10" : "border-slate-50 bg-slate-50 hover:border-slate-200"
@@ -725,22 +807,30 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
        </div>
 
        <div className="space-y-6">
-          <label className="text-[10px] font-black uppercase tracking-widest text-primary ml-1 flex items-center gap-2">
-             <Clock size={12} /> Preferred Arrival Slot
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-             {times.map(t => (
-               <button 
-                key={t}
-                onClick={() => updateData({ ...data, appointmentTime: t })}
-                className={cn(
-                  "px-4 py-4 rounded-2xl border-2 transition-all text-[10px] font-black tracking-widest uppercase",
-                  data.appointmentTime === t ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10" : "border-slate-50 bg-slate-50 hover:border-slate-200"
-                )}
-               >
-                 {t}
-               </button>
-             ))}
+          <div className="flex items-center justify-between ml-1">
+            <label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
+               <Clock size={12} /> Preferred Arrival Slot
+            </label>
+            {bookedSlots.length > 0 && <span className="text-[8px] font-bold text-rose-400 uppercase tracking-widest">{bookedSlots.length} Slots Occupied</span>}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+             {times.map(t => {
+               const isBooked = bookedSlots.includes(t);
+               return (
+                <button 
+                 key={t}
+                 disabled={isBooked}
+                 onClick={() => updateData({ ...data, appointmentTime: t })}
+                 className={cn(
+                   "px-4 py-4 rounded-2xl border-2 transition-all text-[10px] font-black tracking-widest uppercase",
+                   data.appointmentTime === t ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10" : 
+                   isBooked ? "bg-slate-50 border-slate-50 text-slate-300 cursor-not-allowed line-through" : "border-slate-50 bg-slate-50 hover:border-slate-200"
+                 )}
+                >
+                  {t}
+                </button>
+               );
+             })}
           </div>
        </div>
 
@@ -981,6 +1071,37 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
     );
   };
 
+  useEffect(() => {
+    const validateRealTime = () => {
+      setErrors(prev => {
+        const next = { ...prev };
+        
+        if (data.fullName) {
+          if (!/^[a-zA-Z\s]*$/.test(data.fullName)) next.fullName = "Alpha characters only.";
+          else delete next.fullName;
+        }
+        
+        if (data.phone) {
+          if (!/^\d*$/.test(data.phone)) next.phone = "Numeric digits only.";
+          else delete next.phone;
+        }
+
+        if (data.email) {
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) next.email = "Invalid structure.";
+          else delete next.email;
+        }
+
+        if (data.carDetails.plate) {
+          if (!/^[A-Z0-9]*$/i.test(data.carDetails.plate.replace(/\s/g, ""))) next.plate = "Alphanumeric only.";
+          else delete next.plate;
+        }
+        
+        return next;
+      });
+    };
+    validateRealTime();
+  }, [data.fullName, data.phone, data.email, data.carDetails.plate]);
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     
@@ -1008,26 +1129,22 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
       newErrors.city = "Deployment hub (City) is required.";
     }
     
-    // Updated Validations for Year and Plate
     if (!data.carDetails.year) {
       newErrors.year = "Vehicle manufacturing year is required.";
     } else {
       const year = parseInt(data.carDetails.year);
       const currentYear = new Date().getFullYear();
       if (isNaN(year) || year < 1980 || year > currentYear + 1) {
-        newErrors.year = `Year must be between 1980 and ${currentYear + 1}.`;
+        newErrors.year = `Invalid year: 1980-${currentYear + 1}`;
       }
     }
     
     if (!data.carDetails.plate) {
-      newErrors.plate = "Number plate is mandatory for vehicle verification.";
+      newErrors.plate = "Number plate is mandatory.";
     } else {
       const cleanPlate = data.carDetails.plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-      // Indian Plate Format: 2 letters, 2 numbers, 1-2 letters, 1-4 numbers
-      // More permissive regex: supports standard variations
-      const plateRegex = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{1,4}$/;
-      if (!plateRegex.test(cleanPlate)) {
-        newErrors.plate = "Invalid plate sequence. Expected format: MH01AB1234";
+      if (cleanPlate.length < 4) {
+        newErrors.plate = "Plate code too short.";
       }
     }
 
@@ -1086,7 +1203,10 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
                  <input 
                    type="text" 
                    value={data.carDetails.plate}
-                   onChange={(e) => updateData({ ...data, carDetails: { ...data.carDetails, plate: e.target.value } })}
+                   onChange={(e) => {
+                      const val = e.target.value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+                      updateData({ ...data, carDetails: { ...data.carDetails, plate: val } });
+                    }}
                    placeholder="MH 01 AB 1234"
                    className={cn(
                      "w-full bg-white border-2 rounded-xl px-4 py-3 outline-none focus:border-primary transition-all font-bold text-xs uppercase",
@@ -1134,7 +1254,7 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
                       placeholder="XXXXXXXXXX"
                       className={cn(
                         "w-full bg-slate-50 border-2 rounded-2xl pl-16 pr-6 py-4 outline-none focus:border-primary transition-all font-bold",
-                        errors.phone ? "border-rose-300 bg-rose-50" : "border-slate-100"
+                        errors.phone ? "border-rose-300 bg-rose-50" : (data.phone ? "border-emerald-100 bg-emerald-50/10" : "border-slate-100")
                       )}
                     />
                   </div>

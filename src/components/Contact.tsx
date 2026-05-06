@@ -76,6 +76,12 @@ export default function Contact() {
     }
   };
 
+  const isFieldValid = (field: string) => {
+    if (!formData[field as keyof typeof formData]) return false;
+    if (errors[field]) return false;
+    return true;
+  };
+
   return (
     <section id="contact" className="py-32 bg-bg-soft text-ink relative overflow-hidden">
       <div className="container mx-auto px-4 md:px-8 relative z-10">
@@ -175,7 +181,7 @@ export default function Contact() {
                           placeholder="Your happy name"
                           className={cn(
                             "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-primary/5",
-                             errors.fullName ? "border-rose-500 bg-rose-50/30" : "border-transparent focus:border-primary"
+                             errors.fullName ? "border-rose-500 bg-rose-50/30" : (isFieldValid('fullName') ? "border-emerald-500/30 bg-emerald-50/10" : "border-transparent focus:border-primary")
                           )}
                         />
                         {errors.fullName && <p className="text-[10px] font-black uppercase text-rose-500 ml-2 animate-pulse">{errors.fullName}</p>}
@@ -193,7 +199,7 @@ export default function Contact() {
                           placeholder="+91 Phone"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-secondary/5",
-                             errors.phone ? "border-rose-500 bg-rose-50/30" : "border-transparent focus:border-secondary"
+                             errors.phone ? "border-rose-500 bg-rose-50/30" : (isFieldValid('phone') ? "border-emerald-500/30 bg-emerald-50/10" : "border-transparent focus:border-secondary")
                           )}
                         />
                         {errors.phone && <p className="text-[10px] font-black uppercase text-rose-500 ml-2 animate-pulse">{errors.phone}</p>}
@@ -232,7 +238,7 @@ export default function Contact() {
                           placeholder="your@email.com"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-primary/5",
-                             errors.email ? "border-rose-500 bg-rose-50/30" : "border-transparent focus:border-primary"
+                             errors.email ? "border-rose-500 bg-rose-50/30" : (isFieldValid('email') ? "border-emerald-500/30 bg-emerald-50/10" : "border-transparent focus:border-primary")
                           )}
                         />
                         {errors.email && <p className="text-[10px] font-black uppercase text-rose-500 ml-2 animate-pulse">{errors.email}</p>}

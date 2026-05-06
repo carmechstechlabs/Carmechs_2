@@ -40,9 +40,9 @@ export interface UIConfig {
 
 const DEFAULT_CONFIG: UIConfig = {
   primaryColor: "#6366F1",
-  heroTitle: "EXPERT CAR CARE",
-  heroSubtitle: "AT YOUR DOORSTEP",
-  heroImage: "https://picsum.photos/seed/car-engine/1920/1080?blur=5",
+  heroTitle: "EXPERT MECHANICS",
+  heroSubtitle: "HONEST PRICING",
+  heroImage: "https://images.unsplash.com/photo-1486006396113-c7b3497d3361?auto=format&fit=crop&q=80&w=1920&h=1080",
   supportEmail: "assist@carmechs.in",
   supportPhone: "9831231431",
   whatsappNumber: "9831231431",

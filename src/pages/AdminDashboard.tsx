@@ -173,6 +173,13 @@ export default function AdminDashboard() {
           Tata: { logo: "https://www.tatamotors.com/wp-content/themes/tatamotors/assets/images/header-logo.png", models: [
             { name: "Nexon", logo: "" }, { name: "Punch", logo: "" }, { name: "Tiago", logo: "" }
           ] },
+          Toyota: { logo: "https://www.toyota.com/imgix/responsive/images/global/footer/toyota_logo.png", models: [
+            { name: "Fortuner", logo: "" }, { name: "Innova Crysta", logo: "" }
+          ] },
+          "MG Motor": { logo: "https://www.mgmotor.co.in/content/dam/mgmotor/in/logo/MG-Logo.png", models: [
+            { name: "Hector", logo: "https://www.mgmotor.co.in/content/dam/mgmotor/in/variant/hector/mg-hector-thumbnail.png", fuelTypes: ["Petrol", "Diesel"] },
+            { name: "Astor", logo: "https://www.mgmotor.co.in/content/dam/mgmotor/in/variant/astor/mg-astor-thumbnail.png", fuelTypes: ["Petrol"] }
+          ] },
         };
         setCarData(defaults);
         if (isAdminCheck()) {
@@ -1587,7 +1594,14 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
           "Road Test Evaluation"
         ],
         excerpt: "Expert evaluation before you buy.",
-        variants: []
+        variants: [
+          { make: "Toyota", model: "Fortuner", fuel: "Diesel", price: 3499, description: "SUV Grade Inspection" },
+          { make: "Toyota", model: "Innova Crysta", fuel: "Diesel", price: 3299, description: "Premium MPV Inspection" },
+          { make: "MG Motor", model: "Hector", fuel: "Diesel", price: 2999, description: "SUV Tech Scan" },
+          { make: "Maruti", model: "Swift", fuel: "all", price: 1999, description: "Economy Hatch Inspection" },
+          { make: "Audi", model: "all", fuel: "all", price: 4999, description: "Luxury Segment Protocol" },
+          { make: "BMW", model: "all", fuel: "all", price: 4999, description: "Performance Segment Protocol" }
+        ]
       };
 
       const wheelAlignment = {
@@ -2978,7 +2992,8 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
       return;
     }
 
-    const updated = { logo: newBrandLogo.trim(), models: [] };
+    const finalLogo = newBrandLogo.trim() || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(brandId)}&backgroundColor=0f172a&fontSize=45&bold=true&chars=1`;
+    const updated = { logo: finalLogo, models: [] };
     await setDoc(doc(db, "carBrands", brandId), updated);
     setNewBrand("");
     setNewBrandLogo("");
@@ -3015,10 +3030,14 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
       return;
     }
 
-    const logoUrl = modelName.length > 0 ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(modelName)}&backgroundColor=334155&fontSize=45&bold=true` : "";
+    const logoUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(modelName)}&backgroundColor=334155&fontSize=45&bold=true`;
+
+    const fuelTypes = window.confirm(`Initial configuration: Include Diesel as well? (OK for Petrol+Diesel, Cancel for Petrol only)`) 
+      ? ["Petrol", "Diesel"] 
+      : ["Petrol"];
 
     await updateDoc(doc(db, "carBrands", brand), { 
-      models: [...models, { name: modelName, logo: logoUrl, fuelTypes: ["Petrol", "Diesel"] }] 
+      models: [...models, { name: modelName, logo: logoUrl, fuelTypes }] 
     });
     setNewModel({ ...newModel, [brand]: "" });
   };
@@ -3304,20 +3323,21 @@ function CarHubTab({ carData, setCarData }: { carData: Record<string, { logo: st
                 )}
               </div>
 
-              <div className="relative">
+              <div className="relative flex gap-2">
                 <input 
                   type="text" 
                   value={newModel[brand] || ""}
                   onChange={(e) => setNewModel({ ...newModel, [brand]: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddModel(brand)}
                   placeholder="APPEND MODEL..."
-                  className="w-full bg-black/40 border border-white/5 rounded-xl pl-4 pr-12 py-3 text-[9px] font-black uppercase tracking-widest text-white outline-none focus:border-primary transition-all"
+                  className="flex-1 bg-black/40 border border-white/5 rounded-xl pl-4 pr-4 py-3 text-[9px] font-black uppercase tracking-widest text-white outline-none focus:border-primary transition-all"
                 />
                 <button 
                   onClick={() => handleAddModel(brand)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all shadow-inner"
+                  className="w-12 h-12 rounded-xl bg-primary text-white flex items-center justify-center hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 shrink-0"
+                  title="Add Model"
                 >
-                  <Plus size={14} />
+                  <Plus size={18} />
                 </button>
               </div>
             </div>
