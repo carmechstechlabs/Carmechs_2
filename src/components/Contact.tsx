@@ -22,24 +22,35 @@ export default function Contact() {
     message: "",
   });
 
-  const validate = () => {
+  const validate = (data = formData) => {
     const newErrors: Record<string, string> = {};
-    if (formData.fullName.trim().length < 3) newErrors.fullName = "Name must be at least 3 characters";
-    if (!/^\d{10}$/.test(formData.phone.replace(/[\s-]/g, ""))) newErrors.phone = "Enter a valid 10-digit phone number";
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email format";
-    if (!formData.carModel.trim()) newErrors.carModel = "Tell us what you drive!";
-    
-    if (Object.keys(newErrors).length > 0) {
-      toast.error("Form validation failed. Please check the fields.");
+    if (data.fullName.trim() && data.fullName.trim().length < 3) {
+      newErrors.fullName = "Name must be at least 3 characters";
     }
     
-    setErrors(newErrors);
+    const phoneDigits = data.phone.replace(/\D/g, "");
+    if (phoneDigits && phoneDigits.length !== 10) {
+      newErrors.phone = "Enter a valid 10-digit mobile number";
+    }
+
+    if (data.email && !/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(data.email)) {
+      newErrors.email = "Invalid email identity structure";
+    }
+    
+    setErrors(prev => {
+      // Merge only for the fields that are currently being typed
+      return { ...prev, ...newErrors };
+    });
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleBlur = () => {
+    validate();
+  };
+
   const isFormValid = formData.fullName.trim().length >= 3 && 
-                     /^\d{10}$/.test(formData.phone.replace(/[\s-]/g, "")) && 
-                     (!formData.email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) && 
+                     /^\d{10}$/.test(formData.phone.replace(/\D/g, "")) && 
+                     (!formData.email || /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(formData.email)) && 
                      formData.carModel.trim().length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -174,11 +185,18 @@ export default function Contact() {
                           type="text"
                           value={formData.fullName}
                           onChange={(e) => {
-                            setFormData({ ...formData, fullName: e.target.value });
-                            if (errors.fullName) validate();
+                            const val = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+                            setFormData({ ...formData, fullName: val });
+                            // Clear error if now valid
+                            if (val.trim().length >= 3) {
+                              setErrors(prev => {
+                                const next = { ...prev };
+                                delete next.fullName;
+                                return next;
+                              });
+                            }
                           }}
-                          onBlur={validate}
-                          placeholder="Your happy name"
+                          onBlur={() => validate()}
                           className={cn(
                             "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-primary/5",
                              errors.fullName ? "border-rose-500 bg-rose-50/30" : (isFieldValid('fullName') ? "border-emerald-500/30 bg-emerald-50/10" : "border-transparent focus:border-primary")
@@ -192,10 +210,18 @@ export default function Contact() {
                           type="tel"
                           value={formData.phone}
                           onChange={(e) => {
-                            setFormData({ ...formData, phone: e.target.value });
-                            if (errors.phone) validate();
+                            let val = e.target.value.replace(/\D/g, "");
+                            if (val.length > 10) val = val.slice(0, 10);
+                            setFormData({ ...formData, phone: val });
+                            if (val.length === 10) {
+                              setErrors(prev => {
+                                const next = { ...prev };
+                                delete next.phone;
+                                return next;
+                              });
+                            }
                           }}
-                          onBlur={validate}
+                          onBlur={() => validate()}
                           placeholder="+91 Phone"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-secondary/5",
@@ -216,7 +242,7 @@ export default function Contact() {
                             setFormData({ ...formData, carModel: e.target.value });
                             if (errors.carModel) validate();
                           }}
-                          onBlur={validate}
+                          onBlur={() => validate()}
                           placeholder="Make/Model"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-accent/5",
@@ -231,10 +257,18 @@ export default function Contact() {
                           type="email"
                           value={formData.email}
                           onChange={(e) => {
-                            setFormData({ ...formData, email: e.target.value });
-                            if (errors.email) validate();
+                            const val = e.target.value;
+                            setFormData({ ...formData, email: val });
+                            const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+                            if (emailRegex.test(val)) {
+                              setErrors(prev => {
+                                const next = { ...prev };
+                                delete next.email;
+                                return next;
+                              });
+                            }
                           }}
-                          onBlur={validate}
+                          onBlur={() => validate()}
                           placeholder="your@email.com"
                           className={cn(
                              "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none transition-all placeholder:text-slate-300 font-bold text-sm focus:bg-white focus:shadow-lg focus:shadow-primary/5",

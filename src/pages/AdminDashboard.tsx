@@ -65,6 +65,10 @@ import {
   Star,
   UserPlus as MechanicIcon,
   LifeBuoy,
+  DollarSign,
+  RefreshCcw,
+  Target,
+  MapPin,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart as RechartsPie, Pie } from 'recharts';
 
@@ -75,7 +79,7 @@ const ICON_MAP: Record<string, any> = {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { db, auth } from "../lib/firebase";
-import { collection, query, orderBy, onSnapshot, updateDoc, doc, Timestamp, setDoc, addDoc, deleteDoc, serverTimestamp, getDoc, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp, setDoc, addDoc, deleteDoc, serverTimestamp, getDoc, getDocs } from "firebase/firestore";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { useConfig } from "../hooks/useConfig";
 import { refundPayment } from "../lib/payment";
@@ -94,52 +98,139 @@ function robustSearch(item: any, query: string, fields: string[]) {
 }
 
 export default function AdminDashboard() {
-  const { config } = useConfig();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
   const [activeTab, setActiveTab] = useState("overview");
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [locations, setLocations] = useState<any[]>([]);
+  
+  useEffect(() => {
+    const unsubLocs = onSnapshot(collection(db, "locations"), (snap) => {
+        setLocations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsubLocs();
+  }, []);
   const [bookings, setBookings] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [mechanics, setMechanics] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [loadingInquiries, setLoadingInquiries] = useState(true);
   const [loadingMechanics, setLoadingMechanics] = useState(true);
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [carData, setCarData] = useState<Record<string, any>>({});
+  const [config, setConfig] = useState<any>({
+    heroTitle: "EXPERT CAR CARE",
+    heroSubtitle: "AT YOUR DOORSTEP",
+    supportEmail: "support@carmechs.com",
+    supportPhone: "9831231431",
+    whatsappNumber: "+919831231431",
+    whatsappEnabled: true,
+    primaryColor: "#2563EB",
+    heroImage: "",
+    logoText: "CARMECHS",
+    logoUrl: "",
+    footerText: "Premium doorstep car services.",
+    cashOnServiceEnabled: true,
+    seoTitle: "CarMechs | Elite Automotive Care",
+    seoDescription: "Professional door-step car repair and detailing services.",
+    seoKeywords: "car repair, doorstep mechanic, car wash, detailing",
+    navLinks: [{ name: "Services", href: "#services" }, { name: "Mechanics", href: "#mechanics" }],
+    footerLegalLinks: [{ name: "Privacy Policy", href: "/privacy" }, { name: "Terms of Service", href: "/terms" }]
+  });
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
   const isAdminCheck = () => {
-     // Robust Check: Hardcoded email + any user in admins collection (via state if we had it, but for now we follow the rules)
-     // To make the UI friendly, we'll assume any logged in user can try, but labeling them correctly
-     return user && (user.email === "carmechstechlabs@gmail.com" || user.email === "carmechstechlabs@gmail.com"); 
+    return user && (isSuperAdmin || currentUserProfile?.role === "admin");
   };
 
-  // We should also have a way to check if they are in the admins collection to enable UI features
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+
   useEffect(() => {
     if (user) {
       const checkAdminDoc = async () => {
         const docRef = doc(db, "admins", user.uid);
         const docSnap = await getDoc(docRef);
-        if (!docSnap.exists() && user.email === "carmechstechlabs@gmail.com") {
+        if (docSnap.exists()) {
+          setCurrentUserProfile(docSnap.data());
+          setIsSuperAdmin(docSnap.data().role === "super-admin" || user.email === "carmechstechlabs@gmail.com");
+        } else if (user.email === "carmechstechlabs@gmail.com") {
           await setDoc(docRef, {
             email: user.email,
             role: "super-admin",
+            locationId: "all",
             createdAt: serverTimestamp()
           });
           setIsSuperAdmin(true);
+          setCurrentUserProfile({ role: "super-admin", locationId: "all" });
         } else {
-          setIsSuperAdmin(docSnap.exists() || user.email === "carmechstechlabs@gmail.com");
+          setIsSuperAdmin(false);
+          setCurrentUserProfile(null);
         }
       };
       checkAdminDoc();
     } else {
       setIsSuperAdmin(false);
+      setCurrentUserProfile(null);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (isAdminCheck()) {
+      // Seed Rajesh Kumar
+      const seedTech = async () => {
+        const q = query(collection(db, "technicians"), where("name", "==", "Rajesh Kumar"));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          await addDoc(collection(db, "technicians"), {
+            name: "Rajesh Kumar",
+            expertise: "Engine Diagnostics",
+            bio: "Certified expert with 10+ years of experience in complex engine repairs.",
+            rating: 4.8,
+            reviewsCount: 55,
+            status: "available",
+            experience: "10+ Years",
+            specialties: ["Engine Tuning", "Emission Control"],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+          toast.success("Rajesh Kumar added to technician registry.");
+        }
+      };
+      
+      // Seed Config if needed
+      const seedConfig = async () => {
+        const configRef = doc(db, "config", "ui");
+        const docSnap = await getDoc(configRef);
+        let shouldUpdate = false;
+        
+        const updates: any = {};
+        if (!docSnap.exists() || docSnap.data().supportEmail !== "support@carmechs.com") {
+          updates.supportEmail = "support@carmechs.com";
+          shouldUpdate = true;
+        }
+        if (!docSnap.exists() || docSnap.data().whatsappNumber !== "+919831231431") {
+          updates.whatsappNumber = "+919831231431";
+          shouldUpdate = true;
+        }
+        if (!docSnap.exists() || docSnap.data().whatsappEnabled !== true) {
+          updates.whatsappEnabled = true;
+          shouldUpdate = true;
+        }
+        
+        if (shouldUpdate) {
+          await setDoc(configRef, updates, { merge: true });
+          toast.success("System settings updated to support@carmechs.com and +919831231431");
+        }
+      };
+
+      seedTech();
+      seedConfig();
+    }
+  }, [user, isSuperAdmin, currentUserProfile]);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => {
@@ -203,7 +294,16 @@ export default function AdminDashboard() {
 
     const q = query(collection(db, "bookings"), orderBy("createdAt", "desc"));
     const unsubBookings = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Filter by location for location-specific admins
+      if (currentUserProfile && currentUserProfile.role === "admin" && currentUserProfile.locationId !== "all") {
+        const locationName = locations.find(l => l.id === currentUserProfile.locationId)?.name;
+        if (locationName) {
+            docs = docs.filter((b: any) => b.location === locationName);
+        }
+      }
+      
       setBookings(docs);
       setLoadingBookings(false);
     }, (err) => {
@@ -233,11 +333,35 @@ export default function AdminDashboard() {
       }
     });
 
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Filter by location for location-specific admins
+      if (currentUserProfile && currentUserProfile.role === "admin" && currentUserProfile.locationId !== "all") {
+        docs = docs.filter((u: any) => u.locationId === currentUserProfile.locationId || u.city === locations.find(l => l.id === currentUserProfile.locationId)?.city);
+      }
+
+      setUsersList(docs);
+      setLoadingUsers(false);
+    }, (err) => {
+      setLoadingUsers(false);
+      console.warn("Users sync error (expected if not super-admin):", err.message);
+    });
+
+    const unsubConfig = onSnapshot(doc(db, "config", "ui"), (d) => {
+      if (d.exists()) setConfig((prev: any) => ({ ...prev, ...d.data() }));
+    }, (err) => {
+       console.warn("Global UI config error:", err.message);
+    });
+
     return () => {
       unsubBookings();
+      unsubInquiries();
       unsubMechanics();
+      unsubUsers();
+      unsubConfig();
     };
-  }, [user]);
+  }, [user, currentUserProfile, locations]);
 
   const handleLogin = async () => {
     try {
@@ -398,6 +522,30 @@ export default function AdminDashboard() {
     );
   }
 
+  if (!isAdminCheck()) {
+    return (
+        <div className="min-h-screen w-full flex items-center justify-center bg-bg-soft px-4 font-sans text-center">
+             <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white p-12 rounded-[3.5rem] max-w-md w-full shadow-vibrant border-4 border-white"
+             >
+                <div className="bg-rose-100 text-rose-500 w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-8">
+                    <ShieldAlert size={40} />
+                </div>
+                <h2 className="text-3xl font-black text-ink mb-4 italic tracking-tighter">ACCESS DENIED</h2>
+                <p className="text-slate-500 text-sm font-medium mb-10 leading-relaxed uppercase tracking-tighter">Your biological signature does not possess the required clearance level for core systems access.</p>
+                <button 
+                    onClick={handleLogout}
+                    className="w-full bg-black text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-neutral-800 transition-all active:scale-95"
+                >
+                    Return to Surface
+                </button>
+             </motion.div>
+        </div>
+    );
+  }
+
   const sidebarItems = [
     { id: "overview", name: "Overview", icon: BarChart3 },
     { id: "bookings", name: "Bookings", icon: Calendar },
@@ -411,6 +559,7 @@ export default function AdminDashboard() {
     { id: "referrals", name: "Referral System", icon: Gift },
     { id: "marketing", name: "Marketing CMS", icon: Megaphone },
     { id: "customers", name: "Customers", icon: Users },
+    { id: "fleet", name: "Fleet Control", icon: Car },
     { id: "locations", name: "Location Control", icon: Globe },
     { id: "inquiries", name: "Support Inquiries", icon: MessageSquare },
     { id: "integrations", name: "API Integrations", icon: Zap },
@@ -582,7 +731,7 @@ export default function AdminDashboard() {
             {activeTab === "bookings" && <BookingsTab bookings={bookings} mechanics={mechanics} loading={loadingBookings} />}
             {activeTab === "mechanics" && <TechniciansTab />}
             {activeTab === "services" && <ServicesTab carData={carData} />}
-            {activeTab === "content" && <ContentTab />}
+            {activeTab === "content" && <ContentTab config={config} setConfig={setConfig} />}
             {activeTab === "carhub" && <CarHubTab carData={carData} setCarData={setCarData} />}
             {activeTab === "inquiries" && <InquiriesTab inquiries={inquiries} loading={loadingInquiries} />}
             {activeTab === "tickets" && <TicketsTab />}
@@ -591,9 +740,10 @@ export default function AdminDashboard() {
             { activeTab === "referrals" && <ReferralsTab /> }
             { activeTab === "locations" && <LocationsTab /> }
             { activeTab === "integrations" && <IntegrationsTab /> }
-            { activeTab === "customers" && <CustomersTab /> }
+            { activeTab === "customers" && <CustomersTab locations={locations} /> }
+            { activeTab === "fleet" && <FleetControlTab bookings={bookings} /> }
             { activeTab === "marketing" && <MarketingTab /> }
-            { activeTab === "settings" && <SettingsTab user={user} /> }
+            { activeTab === "settings" && <SettingsTab user={user} config={config} setConfig={setConfig} /> }
           </div>
         </div>
       </main>
@@ -602,11 +752,23 @@ export default function AdminDashboard() {
 }
 
 function OverviewTab({ bookings, onTabChange }: { bookings: any[], onTabChange: (tab: string) => void }) {
+  const totalRevenue = bookings.reduce((acc, b) => acc + (b.price || 0), 0);
+  const avgOrderValue = bookings.length > 0 ? (totalRevenue / bookings.length).toFixed(0) : "0";
+  const confirmedBookings = bookings.filter(b => b.status === "confirmed" || b.status === "completed").length;
+  const missionSuccessRate = bookings.length > 0 ? ((confirmedBookings / bookings.length) * 100).toFixed(1) : "0";
+
   const stats = [
-    { name: "Total Engagement", value: bookings.length.toString(), icon: Users, color: "text-blue-500", trend: "+12.5%" },
-    { name: "Live Operations", value: bookings.filter(b => b.status === "in-progress" || b.status === "confirmed").length.toString(), icon: Zap, color: "text-yellow-500", trend: "+5.2%" },
-    { name: "Target Efficiency", value: "94.2%", icon: Gauge, color: "text-emerald-500", trend: "+0.8%" },
-    { name: "Monthly Revenue", value: `₹${bookings.reduce((acc, b) => acc + (b.price || 0), 0).toLocaleString()}`, icon: TrendingUp, color: "text-rose-500", trend: "+24.1%" },
+    { name: "Total Engagement", value: bookings.length.toString(), icon: Users, color: "text-blue-500", trend: "+12.5%", label: "MISSIONS_DEPLOAYED" },
+    { name: "Live Operations", value: bookings.filter(b => b.status === "in-progress" || b.status === "confirmed").length.toString(), icon: Zap, color: "text-yellow-500", trend: "+5.2%", label: "ACTIVE_CIRCUITS" },
+    { name: "Mission Success", value: `${missionSuccessRate}%`, icon: Gauge, color: "text-emerald-500", trend: "+0.8%", label: "STABILITY_INDEX" },
+    { name: "Monthly Revenue", value: `₹${totalRevenue.toLocaleString()}`, icon: TrendingUp, color: "text-rose-500", trend: "+24.1%", label: "WEALTH_FLOW" },
+  ];
+
+  const secondaryKPIs = [
+    { name: "Avg. Mission Value", value: `₹${Number(avgOrderValue).toLocaleString()}`, icon: DollarSign, color: "text-accent-blue" },
+    { name: "User Retention", value: "84%", icon: RefreshCcw, color: "text-primary" },
+    { name: "Conversion Rate", value: "12.4%", icon: Target, color: "text-accent-red" },
+    { name: "Support Rating", value: "4.9/5", icon: Star, color: "text-yellow-400" },
   ];
 
   const recentBookings = bookings.slice(0, 6);
@@ -649,8 +811,22 @@ function OverviewTab({ bookings, onTabChange }: { bookings: any[], onTabChange: 
                 "flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border w-fit",
                 "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
               )}>
-                <TrendingUp size={12} /> {stat.trend} <span className="text-text-dim opacity-50 ml-1">CYCLE_DELTA</span>
+                <TrendingUp size={12} /> {stat.trend} <span className="text-text-dim opacity-50 ml-1">{stat.label}</span>
               </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        {secondaryKPIs.map((kpi, i) => (
+          <div key={i} className="bg-card-bg/60 p-6 rounded-3xl border border-white/5 shadow-xl flex items-center gap-5 group hover:bg-card-bg transition-colors">
+            <div className={cn("w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shadow-inner", kpi.color)}>
+              <kpi.icon size={18} className="group-hover:scale-110 transition-transform" />
+            </div>
+            <div>
+              <div className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] mb-1">{kpi.name}</div>
+              <div className="text-lg font-black text-white italic tracking-tight">{kpi.value}</div>
             </div>
           </div>
         ))}
@@ -872,12 +1048,14 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
 
   const filteredBookings = bookings.filter(b => {
     const statusMatch = statusFilter === "all" || b.status === statusFilter;
-    const searchMatch = robustSearch(b, search, ["fullName", "phone", "carModel", "serviceType", "id", "city", "appointmentDate"]);
+    const searchMatch = robustSearch(b, search, ["fullName", "phone", "carModel", "carDetails.make", "carDetails.model", "serviceType", "id", "city", "appointmentDate"]);
     return statusMatch && searchMatch;
   }).sort((a, b) => {
-    const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
-    const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
-    return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
+    const dateA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : Date.now());
+    const dateB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : Date.now());
+    // Default to newest first (createdAt) 
+    if (sortOrder === "desc") return dateB - dateA;
+    return dateA - dateB;
   });
 
   if (loading) return (
@@ -1673,9 +1851,11 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
   };
 
   const updateVariant = (index: number, field: string, value: any) => {
-    const updated = [...newService.variants];
-    updated[index] = { ...updated[index], [field]: value };
-    setNewService({ ...newService, variants: updated });
+    setNewService(prev => {
+      const updatedVariants = [...prev.variants];
+      updatedVariants[index] = { ...updatedVariants[index], [field]: value };
+      return { ...prev, variants: updatedVariants };
+    });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2512,39 +2692,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
   );
 }
 
-function ContentTab() {
-  const [config, setConfig] = useState<any>({
-    heroTitle: "EXPERT CAR CARE",
-    heroSubtitle: "AT YOUR DOORSTEP",
-    supportEmail: "assist@carmechs.in",
-    supportPhone: "9831231431",
-    whatsappNumber: "9831231431",
-    whatsappEnabled: true,
-    primaryColor: "#2563EB",
-    heroImage: "",
-    logoText: "CARMECHS",
-    logoUrl: "",
-    footerText: "Premium doorstep car services.",
-    cashOnServiceEnabled: true,
-    seoTitle: "CarMechs | Elite Automotive Care",
-    seoDescription: "Professional door-step car repair and detailing services.",
-    seoKeywords: "car repair, doorstep mechanic, car wash, detailing",
-    navLinks: [{ name: "Services", href: "#services" }, { name: "Mechanics", href: "#mechanics" }],
-    footerLegalLinks: [{ name: "Privacy Policy", href: "/privacy" }, { name: "Terms of Service", href: "/terms" }]
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, "config", "ui"), (d) => {
-      if (d.exists()) setConfig((prev: any) => ({ ...prev, ...d.data() }));
-      setLoading(false);
-    }, (err) => {
-      console.warn("ContentTab UI config error:", err.message);
-      setLoading(false);
-    });
-    return unsub;
-  }, []);
-
+function ContentTab({ config, setConfig }: { config: any, setConfig: any }) {
   const handleUpdateConfig = async () => {
     try {
       await setDoc(doc(db, "config", "ui"), config, { merge: true });
@@ -2554,13 +2702,6 @@ function ContentTab() {
       toast.error("Only admins can update public config.");
     }
   };
-
-  if (loading) return (
-    <div className="grid lg:grid-cols-2 gap-10 max-w-7xl mx-auto pb-20">
-      <Skeleton className="h-[500px] rounded-[3rem]" />
-      <Skeleton className="h-[500px] rounded-[3rem]" />
-    </div>
-  )
 
   return (
     <div className="grid lg:grid-cols-2 gap-10 max-w-7xl mx-auto pb-20">
@@ -4435,7 +4576,22 @@ function ReferralsTab() {
   );
 }
 
-function SettingsTab({ user }: { user: any }) {
+function SettingsTab({ user, config, setConfig }: { user: any, config: any, setConfig: any }) {
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveConfig = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "config", "ui"), config, { merge: true });
+      toast.success("Core system parameters synchronized.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Security Override: Failed to update global config.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-20">
        <div className="bg-card-bg p-12 rounded-[3.5rem] border border-border-subtle shadow-2xl relative overflow-hidden group">
@@ -4453,6 +4609,55 @@ function SettingsTab({ user }: { user: any }) {
                 <p className="text-[10px] font-black uppercase tracking-[0.4em] text-text-dim">System configuration & Identity</p>
               </div>
             </div>
+
+            <section className="space-y-8 bg-black/20 p-10 rounded-[3rem] border border-white/5">
+               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary flex items-center gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  Global Operational Constants
+               </h3>
+               <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Support Comms (Email)</label>
+                     <input 
+                       value={config.supportEmail}
+                       onChange={e => setConfig({...config, supportEmail: e.target.value})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Support Hotline (Phone)</label>
+                     <input 
+                       value={config.supportPhone}
+                       onChange={e => setConfig({...config, supportPhone: e.target.value})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">WhatsApp Portal</label>
+                     <input 
+                       value={config.whatsappNumber}
+                       onChange={e => setConfig({...config, whatsappNumber: e.target.value})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Service Radius (City)</label>
+                     <input 
+                       value={config.defaultCity || "Mumbai"}
+                       onChange={e => setConfig({...config, defaultCity: e.target.value})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+               </div>
+               <button 
+                 onClick={handleSaveConfig}
+                 disabled={saving}
+                 className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] shadow-xl shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-3"
+               >
+                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                 Synchronize Core Constants
+               </button>
+            </section>
 
             <section className="space-y-6">
               <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-4 flex items-center justify-between">
@@ -5800,10 +6005,22 @@ function IntegrationsTab() {
   );
 }
 
-function CustomersTab() {
+function CustomersTab({ locations }: { locations: any[] }) {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    displayName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "Mumbai",
+    role: "customer",
+    locationId: "all"
+  });
 
   useEffect(() => {
     return onSnapshot(collection(db, "users"), (snap) => {
@@ -5815,13 +6032,138 @@ function CustomersTab() {
     });
   }, []);
 
+  const handleEdit = (user: any) => {
+    setEditingUser(user);
+    setFormData({
+      displayName: user.displayName || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      address: user.address || "",
+      city: user.city || "Mumbai",
+      role: user.role || "customer",
+      locationId: user.locationId || "all"
+    });
+    setShowAdd(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (editingUser) {
+        await updateDoc(doc(db, "users", editingUser.id), {
+          ...formData,
+          updatedAt: serverTimestamp()
+        });
+        
+        // Update admins collection if role is admin
+        if (formData.role === 'admin' || formData.role === 'super-admin') {
+          await setDoc(doc(db, "admins", editingUser.id), {
+            email: formData.email,
+            role: formData.role,
+            locationId: formData.locationId,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        } else {
+          // If role was admin but changed to customer, remove from admins collection
+          await deleteDoc(doc(db, "admins", editingUser.id)).catch(() => {});
+        }
+        
+        toast.success("User identity updated.");
+      } else {
+        const newUserRef = doc(collection(db, "users"));
+        await setDoc(newUserRef, {
+          ...formData,
+          createdAt: serverTimestamp()
+        });
+        
+        if (formData.role === 'admin' || formData.role === 'super-admin') {
+          await setDoc(doc(db, "admins", newUserRef.id), {
+            email: formData.email,
+            role: formData.role,
+            locationId: formData.locationId,
+            createdAt: serverTimestamp()
+          });
+        }
+        
+        toast.success("New user node deployed.");
+      }
+      setShowAdd(false);
+      setEditingUser(null);
+      setFormData({ displayName: "", email: "", phone: "", address: "", city: "Mumbai", role: "customer", locationId: "all" });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to synchronize user data.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
+      
+      if (newRole === 'admin' || newRole === 'super-admin') {
+        const userDoc = users.find(u => u.id === userId);
+        await setDoc(doc(db, "admins", userId), {
+          email: userDoc?.email,
+          role: newRole,
+          locationId: userDoc?.locationId || "all",
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } else {
+        await deleteDoc(doc(db, "admins", userId)).catch(() => {});
+      }
+      
+      toast.success(`User role updated to ${newRole.toUpperCase()}.`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update user role protocol.");
+    }
+  };
+
+  const handleUpdateLocation = async (userId: string, locationId: string) => {
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        locationId: locationId,
+        updatedAt: serverTimestamp()
+      });
+      
+      // If user is admin, sync to admins collection
+      const userDoc = users.find(u => u.id === userId);
+      if (userDoc?.role === 'admin' || userDoc?.role === 'super-admin') {
+        await updateDoc(doc(db, "admins", userId), {
+          locationId: locationId,
+          updatedAt: serverTimestamp()
+        }).catch(async () => {
+          // If admin doc doesn't exist for some reason, create it
+          await setDoc(doc(db, "admins", userId), {
+            email: userDoc.email,
+            role: userDoc.role,
+            locationId: locationId,
+            updatedAt: serverTimestamp()
+          });
+        });
+      }
+      
+      toast.success("Assigned location updated.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update assigned location.");
+    }
+  };
+
   const filteredUsers = users.filter(u => {
-    return robustSearch(u, search, ["displayName", "email", "phone", "id"]);
+    return robustSearch(u, search, ["displayName", "fullName", "email", "phone", "id", "role"]);
   });
 
   const handleDeleteUser = async (id: string) => {
     if (!window.confirm("Purge user from registry?")) return;
     await deleteDoc(doc(db, "users", id));
+    await deleteDoc(doc(db, "admins", id)).catch(() => {});
   };
 
   return (
@@ -5837,26 +6179,161 @@ function CustomersTab() {
              </div>
           </div>
           
-          <div className="relative w-full md:w-96 group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim group-focus-within:text-primary transition-colors" size={16} />
-            <input 
-              type="text"
-              placeholder="Filter by name, email or comms..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-xs font-black uppercase text-white outline-none focus:border-primary transition-all shadow-inner"
-            />
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="relative flex-1 md:w-96 group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim group-focus-within:text-primary transition-colors" size={16} />
+              <input 
+                type="text"
+                placeholder="Filter by name, email or comms..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-xs font-black uppercase text-white outline-none focus:border-primary transition-all shadow-inner"
+              />
+            </div>
+            <button 
+              onClick={() => {
+                setEditingUser(null);
+                setFormData({ displayName: "", email: "", phone: "", address: "", city: "Mumbai", role: "customer", locationId: "all" });
+                setShowAdd(true);
+              }}
+              className="bg-primary text-white p-4 rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20 shrink-0"
+            >
+              <Plus size={24} />
+            </button>
           </div>
        </div>
 
-       <div className="bg-card-bg rounded-[3rem] border border-border-subtle overflow-hidden shadow-2xl">
-          <table className="w-full text-left">
+       <AnimatePresence>
+          {showAdd && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="bg-card-bg p-10 rounded-[3rem] border-2 border-primary/20 shadow-2xl relative overflow-hidden"
+            >
+               <div className="flex justify-between items-center mb-8">
+                  <h3 className="text-xl font-black text-white uppercase italic tracking-tight">
+                    {editingUser ? "Edit User Identity" : "Deploy New User Node"}
+                  </h3>
+                  <button onClick={() => setShowAdd(false)} className="text-text-dim hover:text-white transition-colors">
+                    <X size={24} />
+                  </button>
+               </div>
+               
+               <form onSubmit={handleSaveUser} className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Full Name</label>
+                        <input 
+                          required
+                          value={formData.displayName}
+                          onChange={e => setFormData({...formData, displayName: e.target.value})}
+                          className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none" 
+                          placeholder="John Driver"
+                        />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Email Address</label>
+                        <input 
+                          required
+                          type="email"
+                          value={formData.email}
+                          onChange={e => setFormData({...formData, email: e.target.value})}
+                          className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none" 
+                          placeholder="john@example.com"
+                        />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Permission Level</label>
+                            <select 
+                                value={formData.role}
+                                onChange={e => setFormData({...formData, role: e.target.value})}
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none appearance-none"
+                            >
+                                <option value="customer">Customer</option>
+                                <option value="admin">Admin / Manager</option>
+                                <option value="super-admin">Super Admin</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Assigned Tactical Hub</label>
+                            <select 
+                                value={formData.locationId}
+                                onChange={e => setFormData({...formData, locationId: e.target.value})}
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none appearance-none"
+                            >
+                                <option value="all">Global Access</option>
+                                {locations.map(loc => (
+                                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                     </div>
+                  </div>
+                  <div className="space-y-4">
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Phone Comms</label>
+                            <input 
+                            value={formData.phone}
+                            onChange={e => setFormData({...formData, phone: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none" 
+                            placeholder="98XXXXXX"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">City Node</label>
+                            <input 
+                            value={formData.city}
+                            onChange={e => setFormData({...formData, city: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none" 
+                            placeholder="Mumbai"
+                            />
+                        </div>
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Physical Address</label>
+                        <textarea 
+                          value={formData.address}
+                          onChange={e => setFormData({...formData, address: e.target.value})}
+                          className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none h-[72px] resize-none" 
+                          placeholder="Full residency details..."
+                        />
+                     </div>
+                  </div>
+                  <div className="md:col-span-2 flex justify-end gap-4 mt-4">
+                     <button 
+                       type="button" 
+                       onClick={() => setShowAdd(false)}
+                       className="px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-text-dim hover:bg-white/5 transition-all"
+                     >
+                       Abort Operation
+                     </button>
+                     <button 
+                       type="submit" 
+                       disabled={saving}
+                       className="px-10 py-4 bg-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                     >
+                       {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                       {editingUser ? "Sync Changes" : "Deploy User"}
+                     </button>
+                  </div>
+               </form>
+            </motion.div>
+          )}
+       </AnimatePresence>
+
+       <div className="bg-card-bg rounded-[3rem] border border-border-subtle overflow-hidden shadow-2xl overflow-x-auto">
+          <table className="w-full text-left min-w-[1000px]">
              <thead>
                 <tr className="bg-black/20 border-b border-white/5">
                    <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">User Identity</th>
+                   <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Permission Level</th>
+                   <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Assigned Hub</th>
                    <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Comms Layer</th>
                    <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Join Epoch</th>
-                   <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim text-right">Ops</th>
+                   <th className="px-10 py-6 text-[10px) font-black uppercase tracking-[0.3em] text-text-dim text-right">Ops</th>
                 </tr>
              </thead>
              <tbody className="divide-y divide-white/5">
@@ -5874,6 +6351,29 @@ function CustomersTab() {
                         </div>
                      </td>
                      <td className="px-10 py-6">
+                        <select 
+                            value={u.role || "customer"}
+                            onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                            className="bg-black/20 border border-white/5 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-white outline-none focus:border-primary transition-all appearance-none cursor-pointer hover:bg-black/40"
+                        >
+                            <option value="customer">CUSTOMER</option>
+                            <option value="admin">ADMIN</option>
+                            <option value="super-admin">SUPER_ADMIN</option>
+                        </select>
+                     </td>
+                     <td className="px-10 py-6">
+                        <select 
+                            value={u.locationId || "all"}
+                            onChange={(e) => handleUpdateLocation(u.id, e.target.value)}
+                            className="bg-black/20 border border-white/5 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-white outline-none focus:border-primary transition-all appearance-none cursor-pointer hover:bg-black/40 max-w-[150px]"
+                        >
+                            <option value="all">GLOBAL_BASE</option>
+                            {locations.map(loc => (
+                                <option key={loc.id} value={loc.id}>{loc.name.toUpperCase()}</option>
+                            ))}
+                        </select>
+                     </td>
+                     <td className="px-10 py-6">
                         <div className="text-[11px] font-black text-text-dim flex items-center gap-2">
                            <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                            {u.phone || "NODE_DISCONNECTED"}
@@ -5885,12 +6385,20 @@ function CustomersTab() {
                         </div>
                      </td>
                      <td className="px-10 py-6 text-right">
-                        <button 
-                          onClick={() => handleDeleteUser(u.id)}
-                          className="w-10 h-10 rounded-xl bg-white/5 text-text-dim hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
-                        >
-                           <Trash2 size={16} />
-                        </button>
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                           <button 
+                             onClick={() => handleEdit(u)}
+                             className="w-10 h-10 rounded-xl bg-white/5 text-text-dim hover:bg-primary hover:text-white transition-all flex items-center justify-center"
+                           >
+                              <Edit size={16} />
+                           </button>
+                           <button 
+                             onClick={() => handleDeleteUser(u.id)}
+                             className="w-10 h-10 rounded-xl bg-white/5 text-text-dim hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center"
+                           >
+                              <Trash2 size={16} />
+                           </button>
+                        </div>
                      </td>
                   </tr>
                 ))}
@@ -5899,6 +6407,96 @@ function CustomersTab() {
        </div>
     </div>
   );
+}
+
+function FleetControlTab({ bookings }: { bookings: any[] }) {
+    const activeVehicles = bookings.filter(b => b.status === "in-progress" || b.status === "confirmed");
+    const [filterStatus, setFilterStatus] = useState("all");
+
+    const stats = [
+        { label: "Active Deployments", value: activeVehicles.length, icon: Activity, color: "text-primary" },
+        { label: "Operational Hubs", value: new Set(bookings.map(b => b.location)).size, icon: Globe, color: "text-emerald-500" },
+        { label: "Critical States", value: bookings.filter(b => b.status === "pending").length, icon: ShieldAlert, color: "text-rose-500" }
+    ];
+
+    return (
+        <div className="space-y-10 max-w-7xl mx-auto pb-24">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {stats.map((s, i) => (
+                    <div key={i} className="bg-card-bg p-8 rounded-[2.5rem] border border-border-subtle shadow-2xl relative overflow-hidden group">
+                        <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <s.icon size={100} strokeWidth={1} />
+                        </div>
+                        <div className="flex items-center gap-5 mb-4">
+                            <div className={cn("w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 shadow-inner", s.color)}>
+                                <s.icon size={22} />
+                            </div>
+                            <div className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">{s.label}</div>
+                        </div>
+                        <div className="text-5xl font-black italic tracking-tighter text-white">{s.value}</div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="bg-card-bg rounded-[3rem] border border-border-subtle shadow-2xl overflow-hidden p-10">
+                <div className="flex justify-between items-center mb-10">
+                    <div>
+                        <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-1">Active <span className="text-primary">Fleet</span> Telemetry</h3>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-text-dim">Real-time status of service vehicles and assigned missions</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {activeVehicles.map((v, i) => (
+                        <div key={i} className="bg-white/2 border border-white/5 p-6 rounded-[2rem] hover:border-primary/30 transition-all group">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center p-2 border border-white/5">
+                                    <Car size={32} className="text-primary group-hover:scale-110 transition-transform" />
+                                </div>
+                                <div className={cn(
+                                    "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest",
+                                    v.status === 'in-progress' ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                )}>
+                                    {v.status}
+                                </div>
+                            </div>
+                            <h4 className="text-lg font-black text-white italic tracking-tight uppercase mb-1">{v.carModel}</h4>
+                            <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <MapPin size={10} /> {v.city} • {v.location}
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-white/40">
+                                    <span>Deployment Tech</span>
+                                    <span className="text-white">{v.mechanicName || "UNASSIGNED"}</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                                    <motion.div 
+                                        initial={{ width: 0 }}
+                                        animate={{ width: v.status === 'in-progress' ? '65%' : '25%' }}
+                                        className="h-full bg-primary"
+                                    />
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 italic">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                        In Pursuit
+                                    </div>
+                                    <div className="text-[10px] font-black uppercase text-white/20">#{v.id.slice(-6).toUpperCase()}</div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {activeVehicles.length === 0 && (
+                        <div className="col-span-full py-24 text-center border-4 border-dashed border-white/5 rounded-[3rem]">
+                            <Car size={48} className="mx-auto text-white/5 mb-4" />
+                            <p className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">No active vehicle signals detected in the fleet.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 function MarketingTab() {

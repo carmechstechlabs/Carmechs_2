@@ -23,13 +23,16 @@ import {
   Check,
   MapPin,
   ChevronDown,
-  Wind
+  Wind,
+  Shield,
+  Hash
 } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc } from "firebase/firestore";
 import { cn } from "../lib/utils";
 import { useConfig } from "../hooks/useConfig";
+import { useAuth } from "../hooks/useAuth";
 import { toast } from "react-toastify";
 import { BookingFormSkeleton } from "./ui/Skeleton";
 import { sendConfirmationEmail, sendNewBookingAlert } from "../lib/mail";
@@ -277,9 +280,11 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
 }
 
 function VehicleStep({ onNext, data, updateData }: StepProps) {
-  const [carHub, setCarHub] = useState<any>({});
-  const [step, setStep] = useState(1); // Internal sub-steps
   const [search, setSearch] = useState("");
+  const [carHub, setCarHub] = useState<any>({});
+  const [step, setStep] = useState(1); // 1: Brand, 2: Model, 3: Fuel, 4: Details
+  const [savedVehicles, setSavedVehicles] = useState<any[]>([]);
+  const { user } = useAuth();
 
   useEffect(() => {
     return onSnapshot(collection(db, "carBrands"), (snapshot) => {
@@ -524,7 +529,74 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
             </div>
           </div>
         )}
-    </motion.div>
+        {step === 4 && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
+            <div className="flex items-center justify-between">
+              <button 
+                onClick={() => setStep(3)} 
+                className="group px-6 py-3 bg-slate-50 rounded-2xl text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-3 hover:bg-primary-soft hover:text-primary transition-all"
+              >
+                <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> 
+                Revise Fuel
+              </button>
+              <div className="flex items-center gap-4 bg-primary-soft px-6 py-3 rounded-2xl border border-primary/10">
+                 <Shield size={16} className="text-primary" />
+                 <span className="text-[11px] font-black text-primary uppercase tracking-[0.2em] italic">{data.make} {data.model}</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-10 rounded-[3rem] border-2 border-white space-y-10 shadow-inner">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between ml-4">
+                  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Manufacturing Epoch (YYYY)</label>
+                  <Calendar size={14} className="text-slate-300" />
+                </div>
+                <input 
+                  type="text" 
+                  maxLength={4}
+                  placeholder="e.g. 2022"
+                  value={data.year}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    updateData({ ...data, year: val });
+                  }}
+                  className="w-full bg-white border-2 border-slate-100 rounded-[2rem] px-8 py-5 outline-none focus:border-primary transition-all font-black text-ink text-2xl tracking-[0.2em] shadow-sm text-center"
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between ml-4">
+                  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">License Plate Signal</label>
+                  <Hash size={14} className="text-slate-300" />
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="e.g. MH01AB1234"
+                  value={data.plate}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+                    updateData({ ...data, plate: val });
+                  }}
+                  className="w-full bg-white border-2 border-slate-100 rounded-[2rem] px-8 py-5 outline-none focus:border-primary transition-all font-black text-ink text-2xl tracking-[0.2em] uppercase shadow-sm text-center"
+                />
+              </div>
+            </div>
+
+            <button 
+              disabled={!data.year || data.year.length !== 4 || !data.plate}
+              onClick={onNext}
+              className="w-full bg-primary text-white py-6 rounded-[2.5rem] font-black text-[10px] uppercase tracking-[0.3em] shadow-2xl shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 flex items-center justify-center gap-4 group"
+            >
+              Lock Configuration
+              <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </motion.div>
+        )}
+     </motion.div>
   );
 }
 
@@ -1077,17 +1149,23 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
         const next = { ...prev };
         
         if (data.fullName) {
-          if (!/^[a-zA-Z\s]*$/.test(data.fullName)) next.fullName = "Alpha characters only.";
+          const val = data.fullName.replace(/[^a-zA-Z\s]/g, "");
+          if (val !== data.fullName) {
+            // This would cause a loop if I update here, usually it's handled in onChange
+          }
+          if (data.fullName.trim().length < 3) next.fullName = "Alpha characters only (min 3).";
           else delete next.fullName;
         }
         
         if (data.phone) {
-          if (!/^\d*$/.test(data.phone)) next.phone = "Numeric digits only.";
+          const phoneDigits = data.phone.replace(/\D/g, "");
+          if (phoneDigits.length !== 10) next.phone = "10-digit mobile number required.";
           else delete next.phone;
         }
 
         if (data.email) {
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) next.email = "Invalid structure.";
+          const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+          if (!emailRegex.test(data.email)) next.email = "Invalid structure.";
           else delete next.email;
         }
 
@@ -1229,7 +1307,10 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
                  <input 
                     type="text" 
                     value={data.fullName}
-                    onChange={(e) => updateData({ ...data, fullName: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+                      updateData({ ...data, fullName: val });
+                    }}
                     placeholder="John Doe"
                     className={cn(
                       "w-full bg-slate-50 border-2 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-bold",
@@ -1247,8 +1328,7 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
                       value={data.phone}
                       onChange={(e) => {
                         let val = e.target.value.replace(/\D/g, "");
-                        if (val.startsWith("91") && val.length > 10) val = val.slice(2);
-                        val = val.slice(0, 10);
+                        if (val.length > 10) val = val.slice(0, 10);
                         updateData({ ...data, phone: val });
                       }}
                       placeholder="XXXXXXXXXX"
@@ -1672,6 +1752,7 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
 
        const bookingRef = await addDoc(collection(db, "bookings"), {
          ...data,
+         carModel: `${data.carDetails.make} ${data.carDetails.model}`, // For Admin Dashboard compatibility
          userId: auth.currentUser?.uid || "anonymous",
          status: "confirmed",
          paymentStatus: payStatus,
