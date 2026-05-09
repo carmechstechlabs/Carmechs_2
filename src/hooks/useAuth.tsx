@@ -12,6 +12,7 @@ const AuthContext = createContext<AuthState & { logout: () => Promise<void> }>({
   user: null,
   loading: true,
   isAdmin: false,
+  isSuperAdmin: false,
   logout: async () => {},
 });
 
@@ -25,7 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         // Listen to Firestore user document
-        const unsubscribeUser = onSnapshot(doc(db, "users", firebaseUser.uid), (docSnap) => {
+        const unsubscribeUser = onSnapshot(doc(db, "users", firebaseUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as UserProfile;
             setUser({
@@ -35,17 +36,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               photoURL: firebaseUser.photoURL
             });
           } else {
-            // Document might not exist yet if they just signed in with Google
-            // but the setDoc in Auth.tsx should handle it.
-            // Fallback to basic info from Firebase Auth
-            setUser({
+            // New user detection - should be handled by a sign-up function 
+            // but we'll put a fallback here for social logins
+            const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const newUser: UserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
-              fullName: firebaseUser.displayName,
+              fullName: firebaseUser.displayName || "",
               role: 'customer',
+              referralCode,
+              bonusBalance: 0,
               createdAt: new Date(),
-              photoURL: firebaseUser.photoURL
-            });
+              photoURL: firebaseUser.photoURL,
+              profileCompleted: false
+            };
+            setUser(newUser);
           }
           setLoading(false);
         }, (err) => {
@@ -67,10 +72,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await firebaseSignOut(auth);
   };
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isSuperAdmin = user?.role === 'super_admin' || user?.email === 'carmechstechlabs@gmail.com';
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, logout }}>
       {children}
     </AuthContext.Provider>
   );

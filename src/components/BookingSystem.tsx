@@ -53,6 +53,7 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
   const [bookingData, setBookingData] = useState({
     carDetails: { make: "", model: "", fuel: "", year: "", plate: "", brandLogo: "", modelLogo: "" },
     location: "Main Workshop - Mumbai Central", // Default
+    locationId: "main-mumbai", // Default
     serviceId: "",
     serviceType: "",
     price: 0,
@@ -166,7 +167,7 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
                   onNext={nextStep}
                   onBack={backStep}
                   data={bookingData.location}
-                  updateData={(l) => setBookingData(prev => ({ ...prev, location: l }))}
+                  updateData={(l: any) => setBookingData(prev => ({ ...prev, location: l.name, locationId: l.id }))}
                />
              )}
              {step === 3 && (
@@ -219,7 +220,7 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
   );
 }
 
-function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void, onBack: () => void, data: string, updateData: (l: string) => void }) {
+function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void, onBack: () => void, data: string, updateData: (l: any) => void }) {
   const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -246,7 +247,7 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
         {branches.map(b => (
           <button
             key={b.id}
-            onClick={() => { updateData(b.name); onNext(); }}
+            onClick={() => { updateData({ name: b.name, id: b.id }); onNext(); }}
             className={cn(
               "p-6 rounded-[2rem] border-2 text-left transition-all group flex items-start gap-4",
               data === b.name ? "border-primary bg-primary-soft" : "border-slate-50 bg-slate-50 hover:border-slate-200"
@@ -1754,7 +1755,7 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
          ...data,
          carModel: `${data.carDetails.make} ${data.carDetails.model}`, // For Admin Dashboard compatibility
          userId: auth.currentUser?.uid || "anonymous",
-         status: "confirmed",
+         status: paymentMethod === 'cash' ? "pending" : "confirmed",
          paymentStatus: payStatus,
          paymentMethod,
          transactionId: tid,

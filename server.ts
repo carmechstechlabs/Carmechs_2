@@ -260,6 +260,38 @@ async function startServer() {
     res.json(result);
   });
 
+  // Notifications: Task Alert
+  app.post("/api/notify/task-alert", async (req, res) => {
+    const { email, task } = req.body;
+    const { title, description, priority, dueDate } = task;
+
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h1 style="color: #f43f5e;">Operational Directive: TASK_ALERT</h1>
+        <p>A priority task is pending your attention.</p>
+        <div style="background: #fff1f2; padding: 15px; border-radius: 8px; border: 1px solid #fecdd3; margin: 20px 0;">
+          <p><strong>Title:</strong> ${title}</p>
+          <p><strong>Priority:</strong> ${priority.toUpperCase()}</p>
+          <p><strong>Due Date:</strong> ${dueDate ? new Date(dueDate).toLocaleString() : "TBD"}</p>
+          <hr style="border: 0; border-top: 1px solid #fecdd3; margin: 15px 0;" />
+          <p><strong>Description:</strong></p>
+          <p>${description || "No metadata provided."}</p>
+        </div>
+        <p style="margin-top: 20px;">Please synchronize with the Command Dashboard to execute the resolution protocol.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.1em;">CarMechs Internal Comms Protocol</p>
+      </div>
+    `;
+
+    const result = await sendEmail({
+      to: email,
+      subject: `[TASK ALERT] ${title} (${priority.toUpperCase()})`,
+      html
+    });
+
+    res.json(result);
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
   });

@@ -3,16 +3,22 @@ export interface UserProfile {
   email: string | null;
   fullName: string | null;
   displayName?: string | null;
-  role: 'admin' | 'customer';
+  role: 'admin' | 'customer' | 'super_admin';
   createdAt: any;
   photoURL?: string | null;
   phone?: string | null;
   referralCode?: string;
+  referredBy?: string;
   bonusBalance?: number;
+  locationId?: string;
+  profileCompleted?: boolean;
+  address?: string;
+  city?: string;
 }
 
 export type AuthState = {
   user: UserProfile | null;
   loading: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
 };

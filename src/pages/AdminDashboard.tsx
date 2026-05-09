@@ -83,6 +83,7 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestam
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { useConfig } from "../hooks/useConfig";
 import { refundPayment } from "../lib/payment";
+import { sendTaskNotification } from "../lib/mail";
 import { toast } from "react-toastify";
 import { Skeleton } from "../components/ui/Skeleton";
 
@@ -156,16 +157,16 @@ export default function AdminDashboard() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setCurrentUserProfile(docSnap.data());
-          setIsSuperAdmin(docSnap.data().role === "super-admin" || user.email === "carmechstechlabs@gmail.com");
+          setIsSuperAdmin(docSnap.data().role === "super_admin" || user.email === "carmechstechlabs@gmail.com");
         } else if (user.email === "carmechstechlabs@gmail.com") {
           await setDoc(docRef, {
             email: user.email,
-            role: "super-admin",
+            role: "super_admin",
             locationId: "all",
             createdAt: serverTimestamp()
           });
           setIsSuperAdmin(true);
-          setCurrentUserProfile({ role: "super-admin", locationId: "all" });
+          setCurrentUserProfile({ role: "super_admin", locationId: "all" });
         } else {
           setIsSuperAdmin(false);
           setCurrentUserProfile(null);
@@ -201,6 +202,85 @@ export default function AdminDashboard() {
         }
       };
       
+      // Seed Services with variants
+      const seedServices = async () => {
+        const snap = await getDocs(collection(db, "services"));
+        if (snap.empty) {
+          const sampleServices = [
+            {
+              title: "General Service",
+              description: "Comprehensive vehicle maintenance including oil change, filter replacement, and 50-point inspection.",
+              price: 2499,
+              isActive: true,
+              category: "Maintenance",
+              icon: "Wrench",
+              variants: [
+                { make: "Maruti Suzuki", model: "all", fuel: "Petrol", price: 1899 },
+                { make: "Hyundai", model: "all", fuel: "Petrol", price: 2199 },
+                { make: "Honda", model: "all", fuel: "Petrol", price: 2599 },
+                { make: "Toyota", model: "Innova", fuel: "Diesel", price: 3999 },
+                { make: "Mahindra", model: "XUV700", fuel: "Diesel", price: 4499 },
+                { make: "all", model: "all", fuel: "Electric", price: 2999 }
+              ]
+            },
+            {
+              title: "Pre-Purchase Inspection",
+              description: "Detailed 150-point inspection before you buy a used car. Includes paint depth check and mechanical scan.",
+              price: 3499,
+              isActive: true,
+              category: "Inspection",
+              icon: "Search",
+              variants: [
+                { make: "all", model: "Luxury", fuel: "all", price: 5499 },
+                { make: "all", model: "SUV", fuel: "all", price: 3999 }
+              ]
+            },
+            {
+              title: "Brake System Overhaul",
+              description: "Pad replacement, disc resurfacing, and brake fluid flushing for maximum stopping power.",
+              price: 2999,
+              isActive: true,
+              category: "Repair",
+              icon: "ShieldAlert",
+              variants: [
+                { make: "Mercedes-Benz", model: "all", fuel: "all", price: 8999 },
+                { make: "BMW", model: "all", fuel: "all", price: 8999 },
+                { make: "Audi", model: "all", fuel: "all", price: 8999 }
+              ]
+            },
+            {
+              title: "Engine Diagnostics",
+              description: "Advanced ECU scanning and sub-system health check with report.",
+              price: 999,
+              isActive: true,
+              category: "Diagnostics",
+              icon: "Zap",
+              variants: [
+                { make: "BMW", model: "all", fuel: "all", price: 2499 },
+                { make: "Mercedes-Benz", model: "all", fuel: "all", price: 2499 },
+                { make: "Audi", model: "all", fuel: "all", price: 2499 }
+              ]
+            },
+            {
+              title: "AC System Overhaul",
+              description: "Gas recharge, leak detection and filter sterilization.",
+              price: 1599,
+              isActive: true,
+              category: "Repair",
+              icon: "Wind",
+              variants: [
+                { make: "Toyota", model: "Fortuner", fuel: "all", price: 2499 },
+                { make: "all", model: "all", fuel: "Electric", price: 1899 }
+              ]
+            }
+          ];
+          for (const s of sampleServices) {
+            await addDoc(collection(db, "services"), s);
+          }
+          toast.success("Tactical service catalog initialized with variants.");
+        }
+      };
+      
       // Seed Config if needed
       const seedConfig = async () => {
         const configRef = doc(db, "config", "ui");
@@ -220,15 +300,42 @@ export default function AdminDashboard() {
           updates.whatsappEnabled = true;
           shouldUpdate = true;
         }
+        if (!docSnap.exists() || docSnap.data().referralRewardAmount === undefined) {
+          updates.referralRewardAmount = 500;
+          shouldUpdate = true;
+        }
         
         if (shouldUpdate) {
           await setDoc(configRef, updates, { merge: true });
-          toast.success("System settings updated to support@carmechs.com and +919831231431");
+          toast.success("System parameters synchronized (Referral Reward: ₹500).");
         }
       };
 
       seedTech();
       seedConfig();
+      seedServices();
+
+      // Seed System Config
+      const seedSystemConfig = async () => {
+        const configRef = doc(db, "config", "system");
+        const configSnap = await getDoc(configRef);
+        if (!configSnap.exists()) {
+          await setDoc(configRef, {
+            supportEmail: "support@carmechs.com",
+            whatsappNumber: "+919831231431",
+            whatsappEnabled: true,
+            referralRewardAmount: 250,
+            currency: "INR",
+            razorpayEnabled: true,
+            updatedAt: serverTimestamp()
+          });
+        }
+      };
+
+      seedTech();
+      seedConfig();
+      seedServices();
+      seedSystemConfig();
     }
   }, [user, isSuperAdmin, currentUserProfile]);
 
@@ -298,10 +405,7 @@ export default function AdminDashboard() {
       
       // Filter by location for location-specific admins
       if (currentUserProfile && currentUserProfile.role === "admin" && currentUserProfile.locationId !== "all") {
-        const locationName = locations.find(l => l.id === currentUserProfile.locationId)?.name;
-        if (locationName) {
-            docs = docs.filter((b: any) => b.location === locationName);
-        }
+        docs = docs.filter((b: any) => b.locationId === currentUserProfile.locationId || b.location === locations.find(l => l.id === currentUserProfile.locationId)?.name);
       }
       
       setBookings(docs);
@@ -558,8 +662,8 @@ export default function AdminDashboard() {
     { id: "testimonials", name: "Testimonials", icon: Quote },
     { id: "referrals", name: "Referral System", icon: Gift },
     { id: "marketing", name: "Marketing CMS", icon: Megaphone },
-    { id: "customers", name: "Customers", icon: Users },
-    { id: "fleet", name: "Fleet Control", icon: Car },
+    { id: "customers", name: "User Management", icon: Users },
+    { id: "fleet", name: "Fleet Telemetry", icon: Activity },
     { id: "locations", name: "Location Control", icon: Globe },
     { id: "inquiries", name: "Support Inquiries", icon: MessageSquare },
     { id: "integrations", name: "API Integrations", icon: Zap },
@@ -740,8 +844,8 @@ export default function AdminDashboard() {
             { activeTab === "referrals" && <ReferralsTab /> }
             { activeTab === "locations" && <LocationsTab /> }
             { activeTab === "integrations" && <IntegrationsTab /> }
-            { activeTab === "customers" && <CustomersTab locations={locations} /> }
-            { activeTab === "fleet" && <FleetControlTab bookings={bookings} /> }
+            { activeTab === "customers" && <UsersTab locations={locations} /> }
+            { activeTab === "fleet" && <FleetControlTab bookings={bookings} technicians={mechanics} /> }
             { activeTab === "marketing" && <MarketingTab /> }
             { activeTab === "settings" && <SettingsTab user={user} config={config} setConfig={setConfig} /> }
           </div>
@@ -3514,6 +3618,7 @@ function TasksTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", dueDate: "" });
+  const [sendingNotify, setSendingNotify] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
@@ -3587,6 +3692,22 @@ function TasksTab() {
       await deleteDoc(doc(db, "tasks", id));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleSendNotification = async (task: any) => {
+    setSendingNotify(task.id);
+    try {
+      const result = await sendTaskNotification(auth.currentUser?.email || "assist@carmechs.in", task);
+      if (result.success) {
+        toast.success("Operational alert transmitted to command node.");
+      } else {
+        toast.error("Transmission failed: Relay node unresponsive.");
+      }
+    } catch (err) {
+      toast.error("System Error: Notification protocol failure.");
+    } finally {
+      setSendingNotify(null);
     }
   };
 
@@ -3780,88 +3901,114 @@ function TasksTab() {
       </div>
 
       <div className="grid gap-4">
-        {filteredTasks.map((task) => (
-          <motion.div 
-            key={task.id}
-            layout
-            className={cn(
-              "bg-card-bg p-8 rounded-[2rem] border border-border-subtle group transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xl relative overflow-hidden",
-              task.status === "completed" ? "opacity-50 grayscale" : "hover:border-white/20 hover:shadow-accent-red/5",
-              task.priority === "high" && task.status !== "completed" && "border-rose-500/30 shadow-[0_0_30px_-10px_rgba(244,63,94,0.1)]"
-            )}
-          >
-            {task.priority === "high" && task.status !== "completed" && (
-              <div className="absolute top-0 left-0 w-1 h-full bg-rose-500" />
-            )}
-            <div className="flex items-center gap-6 flex-1 min-w-0">
-               <button 
-                 onClick={() => handleToggleComplete(task.id, task.status)}
-                 className={cn(
-                  "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all flex-shrink-0 group/check",
-                  task.status === "completed" 
-                    ? "bg-emerald-500 border-emerald-500 text-white" 
-                    : "border-white/10 hover:border-accent-red text-transparent hover:text-accent-red/40"
-                 )}
-               >
-                 <CheckCircle2 size={24} className={cn("transition-transform", task.status === "pending" && "group-hover/check:scale-110")} />
-               </button>
-               
-               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                  <span className={cn(
-                    "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-2 shadow-sm",
-                    task.priority === "high" ? "bg-rose-500/10 text-rose-500 border-rose-500/30" : 
-                    task.priority === "medium" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
-                    "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
-                  )}>
-                    {task.priority === "high" && <AlertCircle size={10} className="animate-pulse" />}
-                    {task.priority === "medium" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                    {task.priority === "low" && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-                    PRIORITY: {task.priority.toUpperCase()}
-                  </span>
-                    {task.dueDate && (
-                      <span className="flex items-center gap-1.5 text-[9px] font-mono font-black text-text-dim italic">
-                        <Clock size={10} />
-                        {new Date(task.dueDate).toLocaleString()}
+        {filteredTasks.map((task) => {
+          const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
+          
+          return (
+            <motion.div 
+              key={task.id}
+              layout
+              className={cn(
+                "bg-card-bg p-8 rounded-[2rem] border border-border-subtle group transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xl relative overflow-hidden",
+                task.status === "completed" ? "opacity-50 grayscale" : "hover:border-white/20 hover:shadow-accent-red/5",
+                task.priority === "high" && task.status !== "completed" && "border-rose-500/30 shadow-[0_0_30px_-10px_rgba(244,63,94,0.1)]",
+                isOverdue && "border-rose-600 animate-pulse-slow shadow-xl shadow-rose-900/10"
+              )}
+            >
+              {(task.priority === "high" || isOverdue) && task.status !== "completed" && (
+                <div className={cn(
+                    "absolute top-0 left-0 w-1.5 h-full",
+                    isOverdue ? "bg-rose-600" : "bg-rose-500"
+                )} />
+              )}
+              <div className="flex items-center gap-6 flex-1 min-w-0">
+                 <button 
+                   onClick={() => handleToggleComplete(task.id, task.status)}
+                   className={cn(
+                    "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all flex-shrink-0 group/check",
+                    task.status === "completed" 
+                      ? "bg-emerald-500 border-emerald-500 text-white" 
+                      : "border-white/10 hover:border-accent-red text-transparent hover:text-accent-red/40"
+                   )}
+                 >
+                   <CheckCircle2 size={24} className={cn("transition-transform", task.status === "pending" && "group-hover/check:scale-110")} />
+                 </button>
+                 
+                 <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                    <span className={cn(
+                      "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-2 shadow-sm",
+                      task.priority === "high" ? "bg-rose-500/10 text-rose-500 border-rose-500/30" : 
+                      task.priority === "medium" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                      "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                    )}>
+                      {task.priority === "high" && <AlertCircle size={10} className="animate-pulse" />}
+                      {task.priority === "medium" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                      {task.priority === "low" && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                      PRIORITY: {task.priority.toUpperCase()}
+                    </span>
+                    {isOverdue && (
+                      <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-rose-600 text-white shadow-xl shadow-rose-900/20 animate-bounce">
+                        OVERDUE_ALERT
                       </span>
                     )}
-                  </div>
-                  <h3 className={cn(
-                    "text-lg font-black uppercase italic tracking-tight transition-all flex items-center gap-3",
-                    task.status === "completed" ? "line-through text-neutral-600" : "text-white group-hover:text-accent-red"
-                  )}>
-                    <div className={cn(
-                      "w-2.5 h-2.5 rounded-full shrink-0 shadow-[0_0_10px_currentColor]",
-                      task.priority === "high" ? "bg-rose-500 text-rose-500" : 
-                      task.priority === "medium" ? "bg-amber-500 text-amber-500" :
-                      "bg-emerald-500 text-emerald-500"
-                    )} />
-                    {task.title}
-                  </h3>
-                  {task.description && (
-                    <p className="text-xs text-neutral-500 font-medium leading-relaxed mt-2 line-clamp-1 group-hover:line-clamp-none transition-all">
-                      {task.description}
-                    </p>
-                  )}
-               </div>
-            </div>
+                      {task.dueDate && (
+                        <span className={cn(
+                            "flex items-center gap-1.5 text-[9px] font-mono font-black italic",
+                            isOverdue ? "text-rose-500" : "text-text-dim"
+                        )}>
+                          <Clock size={10} />
+                          {new Date(task.dueDate).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className={cn(
+                      "text-lg font-black uppercase italic tracking-tight transition-all flex items-center gap-3",
+                      task.status === "completed" ? "line-through text-neutral-600" : "text-white group-hover:text-accent-red"
+                    )}>
+                      <div className={cn(
+                        "w-2.5 h-2.5 rounded-full shrink-0 shadow-[0_0_10px_currentColor]",
+                        task.priority === "high" ? "bg-rose-500 text-rose-500" : 
+                        task.priority === "medium" ? "bg-amber-500 text-amber-500" :
+                        "bg-emerald-500 text-emerald-500"
+                      )} />
+                      {task.title}
+                    </h3>
+                    {task.description && (
+                      <p className="text-xs text-neutral-500 font-medium leading-relaxed mt-2 line-clamp-1 group-hover:line-clamp-none transition-all">
+                        {task.description}
+                      </p>
+                    )}
+                 </div>
+              </div>
 
-            <div className="flex items-center gap-3 pl-12 md:pl-0">
-              <button 
-                onClick={() => handleEdit(task)}
-                className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-accent-red hover:border-accent-red transition-all opacity-0 group-hover:opacity-100"
-              >
-                <Edit2 size={16} />
-              </button>
-              <button 
-                onClick={() => handleDeleteTask(task.id)}
-                className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-rose-500 hover:border-rose-500 transition-all opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </motion.div>
-        ))}
+              <div className="flex items-center gap-3 pl-12 md:pl-0">
+                {task.status !== "completed" && (
+                    <button 
+                        onClick={() => handleSendNotification(task)}
+                        disabled={sendingNotify === task.id}
+                        className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-primary hover:border-primary transition-all group/notify"
+                        title="Dispatch Operational Alert"
+                    >
+                        {sendingNotify === task.id ? <Loader2 size={16} className="animate-spin text-primary" /> : <Bell size={16} />}
+                    </button>
+                )}
+                <button 
+                  onClick={() => handleEdit(task)}
+                  className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-accent-red hover:border-accent-red transition-all opacity-0 group-hover:opacity-100"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button 
+                  onClick={() => handleDeleteTask(task.id)}
+                  className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-rose-500 hover:border-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </motion.div>
+          );
+        })}
 
         {filteredTasks.length === 0 && !loading && (
           <div className="text-center py-32 bg-card-bg rounded-[4rem] border border-border-subtle shadow-xl">
@@ -4641,11 +4788,86 @@ function SettingsTab({ user, config, setConfig }: { user: any, config: any, setC
                      />
                   </div>
                   <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Referral Reward (₹)</label>
+                     <input 
+                       type="number"
+                       value={config.referralRewardAmount || 0}
+                       onChange={e => setConfig({...config, referralRewardAmount: parseInt(e.target.value)})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+                  <div className="space-y-2">
                      <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Service Radius (City)</label>
                      <input 
                        value={config.defaultCity || "Mumbai"}
                        onChange={e => setConfig({...config, defaultCity: e.target.value})}
                        className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+               </div>
+
+               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary flex items-center gap-3 mt-8">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  Aesthetic Directives (Vibe Control)
+               </h3>
+               <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Primary Signature Color</label>
+                     <div className="flex gap-3">
+                        <input 
+                          type="color"
+                          value={config.primaryColor || "#6366f1"}
+                          onChange={e => setConfig({...config, primaryColor: e.target.value})}
+                          className="w-12 h-12 bg-transparent border-none cursor-pointer"
+                        />
+                        <input 
+                          value={config.primaryColor || "#6366f1"}
+                          onChange={e => setConfig({...config, primaryColor: e.target.value})}
+                          className="flex-1 bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all font-mono"
+                        />
+                     </div>
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Accent Secondary Color</label>
+                     <div className="flex gap-3">
+                        <input 
+                          type="color"
+                          value={config.secondaryColor || "#10B981"}
+                          onChange={e => setConfig({...config, secondaryColor: e.target.value})}
+                          className="w-12 h-12 bg-transparent border-none cursor-pointer"
+                        />
+                        <input 
+                          value={config.secondaryColor || "#10B981"}
+                          onChange={e => setConfig({...config, secondaryColor: e.target.value})}
+                          className="flex-1 bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all font-mono"
+                        />
+                     </div>
+                  </div>
+               </div>
+
+               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary flex items-center gap-3 mt-8">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  Financial Gateway Architecture
+               </h3>
+               <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Razorpay Key ID</label>
+                     <input 
+                       type="password"
+                       value={config.razorpayKeyId || ""}
+                       onChange={e => setConfig({...config, razorpayKeyId: e.target.value})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                       placeholder="rzp_live_..."
+                     />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-text-dim uppercase tracking-[0.2em] ml-1">Razorpay Key Secret</label>
+                     <input 
+                       type="password"
+                       value={config.razorpayKeySecret || ""}
+                       onChange={e => setConfig({...config, razorpayKeySecret: e.target.value})}
+                       className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
+                       placeholder="••••••••••••••••"
                      />
                   </div>
                </div>
@@ -6005,7 +6227,7 @@ function IntegrationsTab() {
   );
 }
 
-function CustomersTab({ locations }: { locations: any[] }) {
+function UsersTab({ locations }: { locations: any[] }) {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -6057,7 +6279,7 @@ function CustomersTab({ locations }: { locations: any[] }) {
         });
         
         // Update admins collection if role is admin
-        if (formData.role === 'admin' || formData.role === 'super-admin') {
+        if (formData.role === 'admin' || formData.role === 'super_admin') {
           await setDoc(doc(db, "admins", editingUser.id), {
             email: formData.email,
             role: formData.role,
@@ -6077,7 +6299,7 @@ function CustomersTab({ locations }: { locations: any[] }) {
           createdAt: serverTimestamp()
         });
         
-        if (formData.role === 'admin' || formData.role === 'super-admin') {
+        if (formData.role === 'admin' || formData.role === 'super_admin') {
           await setDoc(doc(db, "admins", newUserRef.id), {
             email: formData.email,
             role: formData.role,
@@ -6106,7 +6328,7 @@ function CustomersTab({ locations }: { locations: any[] }) {
         updatedAt: serverTimestamp()
       });
       
-      if (newRole === 'admin' || newRole === 'super-admin') {
+      if (newRole === 'admin' || newRole === 'super_admin') {
         const userDoc = users.find(u => u.id === userId);
         await setDoc(doc(db, "admins", userId), {
           email: userDoc?.email,
@@ -6134,7 +6356,7 @@ function CustomersTab({ locations }: { locations: any[] }) {
       
       // If user is admin, sync to admins collection
       const userDoc = users.find(u => u.id === userId);
-      if (userDoc?.role === 'admin' || userDoc?.role === 'super-admin') {
+      if (userDoc?.role === 'admin' || userDoc?.role === 'super_admin') {
         await updateDoc(doc(db, "admins", userId), {
           locationId: locationId,
           updatedAt: serverTimestamp()
@@ -6253,7 +6475,7 @@ function CustomersTab({ locations }: { locations: any[] }) {
                             >
                                 <option value="customer">Customer</option>
                                 <option value="admin">Admin / Manager</option>
-                                <option value="super-admin">Super Admin</option>
+                                <option value="super_admin">Super Admin</option>
                             </select>
                         </div>
                         <div className="space-y-2">
@@ -6358,7 +6580,7 @@ function CustomersTab({ locations }: { locations: any[] }) {
                         >
                             <option value="customer">CUSTOMER</option>
                             <option value="admin">ADMIN</option>
-                            <option value="super-admin">SUPER_ADMIN</option>
+                            <option value="super_admin">SUPER_ADMIN</option>
                         </select>
                      </td>
                      <td className="px-10 py-6">
@@ -6409,14 +6631,40 @@ function CustomersTab({ locations }: { locations: any[] }) {
   );
 }
 
-function FleetControlTab({ bookings }: { bookings: any[] }) {
-    const activeVehicles = bookings.filter(b => b.status === "in-progress" || b.status === "confirmed");
+function FleetControlTab({ bookings, technicians }: { bookings: any[], technicians: any[] }) {
+    const activeVehicles = bookings.filter(b => b.status === "in-progress" || b.status === "confirmed" || b.status === "pending");
     const [filterStatus, setFilterStatus] = useState("all");
 
+    const handleUpdateStatus = async (id: string, newStatus: string) => {
+        try {
+            await updateDoc(doc(db, "bookings", id), {
+                status: newStatus,
+                updatedAt: serverTimestamp()
+            });
+            toast.success("Fleet unit status synchronized.");
+        } catch (err) {
+            toast.error("Telemetry update failed.");
+        }
+    };
+
+    const handleAssignTech = async (bookingId: string, techId: string) => {
+        try {
+            const tech = technicians.find(t => t.id === techId);
+            await updateDoc(doc(db, "bookings", bookingId), {
+                mechanicId: techId,
+                mechanicName: tech?.name || "Unassigned",
+                updatedAt: serverTimestamp()
+            });
+            toast.success("Technician module assigned to fleet unit.");
+        } catch (err) {
+            toast.error("Assignment protocol failed.");
+        }
+    };
+
     const stats = [
-        { label: "Active Deployments", value: activeVehicles.length, icon: Activity, color: "text-primary" },
+        { label: "Active Deployments", value: activeVehicles.filter(v => v.status !== 'pending').length, icon: Activity, color: "text-primary" },
         { label: "Operational Hubs", value: new Set(bookings.map(b => b.location)).size, icon: Globe, color: "text-emerald-500" },
-        { label: "Critical States", value: bookings.filter(b => b.status === "pending").length, icon: ShieldAlert, color: "text-rose-500" }
+        { label: "Priority Requests", value: bookings.filter(b => b.status === "pending").length, icon: ShieldAlert, color: "text-rose-500" }
     ];
 
     return (
@@ -6441,48 +6689,75 @@ function FleetControlTab({ bookings }: { bookings: any[] }) {
             <div className="bg-card-bg rounded-[3rem] border border-border-subtle shadow-2xl overflow-hidden p-10">
                 <div className="flex justify-between items-center mb-10">
                     <div>
-                        <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-1">Active <span className="text-primary">Fleet</span> Telemetry</h3>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-text-dim">Real-time status of service vehicles and assigned missions</p>
+                        <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-1">Fleet <span className="text-primary">Operations</span> Control</h3>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-text-dim">Real-time status of service vehicles and active mission management</p>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {activeVehicles.map((v, i) => (
-                        <div key={i} className="bg-white/2 border border-white/5 p-6 rounded-[2rem] hover:border-primary/30 transition-all group">
+                        <div key={i} className="bg-black/40 border border-white/5 p-6 rounded-[2rem] hover:border-primary/30 transition-all group relative">
                             <div className="flex justify-between items-start mb-6">
                                 <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center p-2 border border-white/5">
                                     <Car size={32} className="text-primary group-hover:scale-110 transition-transform" />
                                 </div>
-                                <div className={cn(
-                                    "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest",
-                                    v.status === 'in-progress' ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                                )}>
-                                    {v.status}
-                                </div>
+                                <select 
+                                    value={v.status}
+                                    onChange={(e) => handleUpdateStatus(v.id, e.target.value)}
+                                    className={cn(
+                                        "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none border transition-all appearance-none cursor-pointer",
+                                        v.status === 'in-progress' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : 
+                                        v.status === 'confirmed' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                        "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                                    )}
+                                >
+                                    <option value="pending">PENDING</option>
+                                    <option value="confirmed">CONFIRMED</option>
+                                    <option value="in-progress">IN_PROGRESS</option>
+                                    <option value="completed">COMPLETED</option>
+                                    <option value="cancelled">CANCELLED</option>
+                                </select>
                             </div>
+                            
                             <h4 className="text-lg font-black text-white italic tracking-tight uppercase mb-1">{v.carModel}</h4>
                             <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest mb-6 flex items-center gap-2">
                                 <MapPin size={10} /> {v.city} • {v.location}
                             </div>
                             
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-white/40">
-                                    <span>Deployment Tech</span>
-                                    <span className="text-white">{v.mechanicName || "UNASSIGNED"}</span>
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-[8px] font-black uppercase text-white/30 tracking-widest block ml-1">Assigned Support Node</label>
+                                    <select 
+                                        value={v.mechanicId || ""}
+                                        onChange={(e) => handleAssignTech(v.id, e.target.value)}
+                                        className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-white outline-none focus:border-primary transition-all appearance-none"
+                                    >
+                                        <option value="">DELEGATE_UNASSIGNED</option>
+                                        {technicians.map(t => (
+                                            <option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
-                                    <motion.div 
-                                        initial={{ width: 0 }}
-                                        animate={{ width: v.status === 'in-progress' ? '65%' : '25%' }}
-                                        className="h-full bg-primary"
-                                    />
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 italic">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                                        In Pursuit
+
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-white/40">
+                                        <span>Mission Progress</span>
+                                        <span className="text-white">{v.status === 'completed' ? '100%' : v.status === 'in-progress' ? '65%' : '15%'}</span>
                                     </div>
-                                    <div className="text-[10px] font-black uppercase text-white/20">#{v.id.slice(-6).toUpperCase()}</div>
+                                    <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                                        <motion.div 
+                                            initial={{ width: 0 }}
+                                            animate={{ width: v.status === 'completed' ? '100%' : v.status === 'in-progress' ? '65%' : '15%' }}
+                                            className="h-full bg-primary"
+                                        />
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 italic">
+                                            {v.status === 'in-progress' && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
+                                            {v.status.replace("_", " ")}
+                                        </div>
+                                        <div className="text-[10px] font-black uppercase text-white/20">#{v.id.slice(-6).toUpperCase()}</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

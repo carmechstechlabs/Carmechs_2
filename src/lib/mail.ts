@@ -52,3 +52,17 @@ export async function sendInquiryConfirmation(email: string, name: string) {
   await new Promise(resolve => setTimeout(resolve, 1000));
   return { success: true };
 }
+
+export async function sendTaskNotification(email: string, task: any) {
+  try {
+    const response = await fetch("/api/notify/task-alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, task }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to relay task alert:", error);
+    return { success: false, error };
+  }
+}
