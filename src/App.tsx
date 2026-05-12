@@ -6,6 +6,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import AdminDashboard from "./pages/AdminDashboard";
+import MechanicDashboard from "./pages/MechanicDashboard";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Support from "./pages/Support";
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/support" element={<Support />} />
               <Route path="/admin/*" element={<AdminDashboard />} />
+              <Route path="/mechanic/*" element={<MechanicDashboard />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Router>

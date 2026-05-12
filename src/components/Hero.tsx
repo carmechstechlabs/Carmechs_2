@@ -44,7 +44,7 @@ export default function Hero() {
               <span className="text-xs font-black uppercase tracking-widest">Fastest Service in Town</span>
             </div>
 
-            <h1 className="text-6xl md:text-8xl font-black text-ink leading-[1.1] mb-8 font-display tracking-tight">
+            <h1 className="text-[70px] font-black text-ink leading-[1.1] mb-8 font-display tracking-tight">
               {config.heroTitle || "HONEST PRICING"} <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
                 {config.heroSubtitle || "EXPERT MECHANICS"}

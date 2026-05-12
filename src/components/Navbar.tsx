@@ -71,6 +71,14 @@ export default function Navbar() {
               Admin Portal
             </Link>
           )}
+          {user?.role === 'mechanic' && (
+            <Link
+              to="/mechanic"
+              className="px-6 py-2.5 rounded-xl text-sm font-black text-accent-blue hover:bg-blue-50 transition-all border border-blue-100/50"
+            >
+              Mech Portal
+            </Link>
+          )}
           {navLinks.map((link) => (
             link.isPage ? (
               <Link
@@ -169,6 +177,21 @@ export default function Navbar() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     Admin Portal
+                  </Link>
+                </motion.div>
+              )}
+              {user?.role === 'mechanic' && (
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0 }}
+                >
+                  <Link
+                    to="/mechanic"
+                    className="text-4xl font-black text-accent-blue hover:text-blue-600 transition-colors font-display"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Mech Portal
                   </Link>
                 </motion.div>
               )}

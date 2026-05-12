@@ -10,6 +10,7 @@ import {
   Search, 
   ChevronRight,
   ChevronLeft,
+  ArrowDown,
   TrendingUp,
   Clock,
   CheckCircle2,
@@ -48,6 +49,7 @@ import {
   ListTodo,
   Quote,
   Zap,
+  SearchCode,
   Activity,
   Car,
   Fuel,
@@ -71,6 +73,8 @@ import {
   MapPin,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart as RechartsPie, Pie } from 'recharts';
+
+import { GoogleGenAI } from "@google/genai";
 
 const ICON_MAP: Record<string, any> = {
   Wrench, Battery, Gauge, Droplets, Disc, Settings, Shield, ShieldCheck, Zap, Activity, Car, Fuel, Thermometer, Settings2
@@ -1149,6 +1153,8 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const filteredBookings = bookings.filter(b => {
     const statusMatch = statusFilter === "all" || b.status === statusFilter;
@@ -1161,6 +1167,9 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
     if (sortOrder === "desc") return dateB - dateA;
     return dateA - dateB;
   });
+  
+  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const paginatedBookings = filteredBookings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   if (loading) return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -1338,7 +1347,15 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
             <thead>
               <tr className="bg-black/20 border-b border-white/5">
                 <th className="px-6 py-5 w-10"></th>
-                <th className="px-6 py-5">NODE ID</th>
+                <th className="px-6 py-5">
+                  <button 
+                    onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                    className="flex items-center gap-2 group/sort"
+                  >
+                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest group-hover/sort:text-white transition-colors">Digital Chronology</span>
+                    <ArrowDown size={14} className={cn("text-accent-red transition-transform", sortOrder === "asc" && "rotate-180")} />
+                  </button>
+                </th>
                 <th className="px-6 py-5">OPERATOR / CUSTOMER</th>
                 <th className="px-6 py-5">SPECIFICATION</th>
                 <th className="px-6 py-5">LEVEL</th>
@@ -1346,7 +1363,7 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filteredBookings.map((booking) => (
+              {paginatedBookings.map((booking) => (
                 <React.Fragment key={booking.id}>
                   <tr 
                     className={cn(
@@ -1644,6 +1661,45 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="bg-black/20 px-10 py-6 border-t border-white/5 flex items-center justify-between">
+            <div className="text-[10px] font-black text-text-dim uppercase tracking-widest">
+              Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredBookings.length)} of {filteredBookings.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg bg-white/5 border border-white/5 text-text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }).map((_, i) => (
+                  <button 
+                    key={i}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={cn(
+                      "w-8 h-8 rounded-lg text-[10px] font-black transition-all",
+                      currentPage === i + 1 ? "bg-accent-red text-white" : "bg-white/5 text-text-dim hover:bg-white/10"
+                    )}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg bg-white/5 border border-white/5 text-text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1661,7 +1717,9 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [pricingExpanded, setPricingExpanded] = useState(false);
-  const [previewCar, setPreviewCar] = useState({ make: "", model: "", fuel: "Petrol" });
+  const [reviewsExpanded, setReviewsExpanded] = useState(false);
+  const [researching, setResearching] = useState(false);
+  const [previewCar, setPreviewCar] = useState({ make: "", model: "", fuel: "Petrol", engine: "All" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const serviceImageInputRef = useRef<HTMLInputElement>(null);
   const [newService, setNewService] = useState({ 
@@ -1675,7 +1733,8 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
     notes: "",
     imageUrl: "",
     features: [] as string[],
-    variants: [] as { make: string, model: string, fuel: string, price: number, description?: string }[]
+    variants: [] as { make: string, model: string, fuel: string, engine?: string, price: number, description?: string }[],
+    reviews: [] as any[]
   });
 
   const availableIcons = Object.keys(ICON_MAP);
@@ -1741,7 +1800,8 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
       notes: service.notes || "",
       imageUrl: service.imageUrl || "",
       features: service.features || [],
-      variants: service.variants || []
+      variants: service.variants || [],
+      reviews: service.reviews || []
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1775,7 +1835,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
       setNewService({ 
         title: "", excerpt: "", description: "", price: 0, isActive: true, 
         category: "Maintenance", icon: "Wrench", notes: "", imageUrl: "", 
-        features: [], variants: [] 
+        features: [], variants: [], reviews: [] 
       });
     } catch (err) {
       console.error(err);
@@ -1816,32 +1876,133 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
     const lowerMake = previewCar.make.toLowerCase();
     const lowerModel = previewCar.model.toLowerCase();
     const lowerFuel = previewCar.fuel.toLowerCase();
+    const lowerEngine = (previewCar.engine || "all").toLowerCase();
 
     // Strategy: Return the most specific match first
     return variants.find((v: any) => 
       v.make.toLowerCase() === lowerMake && 
       v.model.toLowerCase() === lowerModel && 
-      v.fuel.toLowerCase() === lowerFuel
+      v.fuel.toLowerCase() === lowerFuel &&
+      (v.engine || "all").toLowerCase() === lowerEngine
     ) || 
     variants.find((v: any) => 
       v.make.toLowerCase() === lowerMake && 
       v.model.toLowerCase() === lowerModel && 
-      v.fuel.toLowerCase() === "all"
+      v.fuel.toLowerCase() === lowerFuel &&
+      (v.engine || "all").toLowerCase() === "all"
+    ) || 
+    variants.find((v: any) => 
+      v.make.toLowerCase() === lowerMake && 
+      v.model.toLowerCase() === lowerModel && 
+      v.fuel.toLowerCase() === "all" &&
+      (v.engine || "all").toLowerCase() === "all"
     ) ||
     variants.find((v: any) => 
       v.make.toLowerCase() === lowerMake && 
       v.model.toLowerCase() === "all" && 
-      v.fuel.toLowerCase() === lowerFuel
+      v.fuel.toLowerCase() === lowerFuel &&
+      (v.engine || "all").toLowerCase() === "all"
     ) ||
     variants.find((v: any) => 
       v.make.toLowerCase() === lowerMake && 
       v.model.toLowerCase() === "all" && 
-      v.fuel.toLowerCase() === "all"
+      v.fuel.toLowerCase() === "all" &&
+      (v.engine || "all").toLowerCase() === "all"
     ) ||
     variants.find((v: any) => 
       v.make.toLowerCase() === "all" && 
-      v.fuel.toLowerCase() === lowerFuel
+      v.fuel.toLowerCase() === lowerFuel &&
+      (v.engine || "all").toLowerCase() === "all"
     );
+  };
+
+  const handleResearchService = async (serviceTitle?: string, existingId?: string) => {
+    const title = serviceTitle || newService.title;
+    if (!title) {
+       toast.warning("Title required for diagnostic research.");
+       return;
+    }
+    setResearching(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `Research car service details for "${title}". 
+      Focus on deep technical data including relevant car parts, diagnostic procedures, and industry standards.
+      Provide:
+      1. A professional excerpt (max 20 words).
+      2. A detailed description of what the service involves.
+      3. A list of 5 key features or diagnostic steps included in this service.
+      4. Detailed technical notes for a mechanic, specifically mentioning required car parts, specialized tools, and diagnostic procedures.
+      Return ONLY in JSON format: { "excerpt": "...", "description": "...", "features": ["...", "..."], "notes": "..." }`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json"
+        },
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      
+      if (existingId) {
+        await updateDoc(doc(db, "services", existingId), {
+           excerpt: data.excerpt,
+           description: data.description,
+           features: data.features,
+           notes: data.notes,
+           updatedAt: serverTimestamp()
+        });
+        toast.success("Intelligence successfully fetched via Grounded Search.");
+      } else {
+        setNewService(prev => ({
+          ...prev,
+          excerpt: data.excerpt || prev.excerpt,
+          description: data.description || prev.description,
+          features: Array.isArray(data.features) ? data.features : prev.features,
+          notes: data.notes || prev.notes
+        }));
+        toast.success("Service specs populated via Google Search Grounding.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Cloud synchronization failed. Please check network.");
+    } finally {
+      setResearching(false);
+    }
+  };
+
+  const handleUpdateReviewStatus = async (serviceId: string, reviewId: string, status: "approved" | "rejected") => {
+    try {
+      const service = services.find(s => s.id === serviceId);
+      if (!service) return;
+      
+      const updatedReviews = (service.reviews || []).map((r: any) => 
+        r.id === reviewId ? { ...r, status } : r
+      );
+      
+      await updateDoc(doc(db, "services", serviceId), { reviews: updatedReviews });
+      toast.success(`Review ${status === 'approved' ? 'cleared for public' : 'suppressed'}.`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Review state update failed.");
+    }
+  };
+
+  const handleRemoveReview = async (serviceId: string, reviewId: string) => {
+    if (!window.confirm("Purge this feedback from registry?")) return;
+    try {
+      const service = services.find(s => s.id === serviceId);
+      if (!service) return;
+      
+      const updatedReviews = (service.reviews || []).filter((r: any) => r.id !== reviewId);
+      
+      await updateDoc(doc(db, "services", serviceId), { reviews: updatedReviews });
+      toast.success("Feedback purged successfully.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Relational deletion failed.");
+    }
   };
 
   const updateFeatureSnapshot = (index: number, val: string) => {
@@ -1944,7 +2105,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
   const addVariant = () => {
     setNewService({ 
       ...newService, 
-      variants: [...newService.variants, { make: "", model: "", fuel: "Petrol", price: newService.price, description: "" }] 
+      variants: [...newService.variants, { make: "", model: "", fuel: "Petrol", engine: "All", price: newService.price, description: "" }] 
     });
     setPricingExpanded(true);
   };
@@ -2080,12 +2241,19 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                 <select 
                   value={previewCar.fuel}
                   onChange={(e) => setPreviewCar({ ...previewCar, fuel: e.target.value })}
-                  className="bg-transparent text-[10px] font-black text-white hover:text-accent-red transition-colors outline-none cursor-pointer uppercase py-1 px-2"
+                  className="bg-transparent text-[10px] font-black text-white hover:text-accent-red transition-colors outline-none cursor-pointer uppercase py-1 border-r border-white/5 px-2"
                 >
                   {["Petrol", "Diesel", "CNG", "Electric"].map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
+                <input 
+                  type="text"
+                  value={previewCar.engine}
+                  onChange={(e) => setPreviewCar({ ...previewCar, engine: e.target.value })}
+                  placeholder="ENGINE..."
+                  className="bg-transparent text-[10px] font-black text-white hover:text-accent-red transition-colors outline-none cursor-pointer uppercase py-1 px-2 w-20"
+                />
                 <button 
-                  onClick={() => setPreviewCar({ make: "", model: "", fuel: "Petrol" })}
+                  onClick={() => setPreviewCar({ make: "", model: "", fuel: "Petrol", engine: "All" })}
                   className="px-2 text-text-dim hover:text-rose-500 transition-colors"
                   title="Reset Preview"
                 >
@@ -2097,7 +2265,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim transition-colors group-focus-within/search:text-accent-red" size={14} />
                 <input 
                   type="text"
-                  placeholder="Search manifest..."
+                  placeholder="Catalog search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-black/40 border border-white/5 rounded-xl text-[11px] font-bold text-white focus:outline-none focus:border-accent-red transition-all shadow-inner placeholder:text-neutral-700 font-mono"
@@ -2214,6 +2382,9 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                             <div className="text-sm font-black text-white group-hover:text-accent-red transition-colors flex items-center gap-3 uppercase italic">
                               {s.title}
                               {s.icon && ICON_MAP[s.icon] && React.createElement(ICON_MAP[s.icon], { size: 14, className: "text-accent-red/40" })}
+                              {s.reviews?.some((r: any) => r.status === 'pending') && (
+                                <span className="flex h-2 w-2 rounded-full bg-accent-red animate-ping" title="Pending Reviews" />
+                              )}
                             </div>
                             <div className="flex items-center gap-3 mt-1.5">
                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-dim bg-white/5 px-2 py-0.5 rounded border border-white/5">{s.category}</span>
@@ -2261,6 +2432,14 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                       </td>
                       <td className="px-8 py-5 text-right">
                         <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    onClick={() => handleResearchService(s.title, s.id)}
+                    disabled={researching}
+                    className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-cyan-400 hover:border-cyan-400 hover:bg-cyan-400/5 shadow-lg transition-all"
+                    title="Search Parts & Diagnostics"
+                  >
+                    {researching ? <Loader2 size={16} className="animate-spin" /> : <SearchCode size={16} />}
+                  </button>
                           <button 
                             onClick={() => startEdit(s)}
                             className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-accent-red hover:border-accent-red hover:bg-accent-red/5 shadow-lg transition-all"
@@ -2359,6 +2538,98 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                                   </div>
                                 </div>
                               </div>
+                              {/* Customer Feedback Mesh */}
+                              <div className="md:col-span-3 space-y-8 pt-10 border-t border-white/5">
+                                 <div className="flex justify-between items-center px-2">
+                                    <div>
+                                       <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.3em] flex items-center gap-3">
+                                          <Quote size={14} /> Customer Feedback Mesh
+                                       </h4>
+                                       <p className="text-[9px] text-text-dim uppercase tracking-widest mt-1">Review validation and moderation terminal</p>
+                                    </div>
+                                    <div className="flex gap-4">
+                                       <div className="flex items-center gap-2">
+                                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                          <span className="text-[9px] font-black text-white/50 uppercase tracking-widest">
+                                             {(s.reviews || []).filter((r: any) => r.status === 'approved').length} Active
+                                          </span>
+                                       </div>
+                                       <div className="flex items-center gap-2">
+                                          <div className="w-2 h-2 rounded-full bg-accent-red" />
+                                          <span className="text-[9px] font-black text-white/50 uppercase tracking-widest">
+                                             {(s.reviews || []).filter((r: any) => r.status === 'pending').length} Pending
+                                          </span>
+                                       </div>
+                                    </div>
+                                 </div>
+
+                                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {s.reviews && s.reviews.length > 0 ? (
+                                       s.reviews.map((r: any) => (
+                                          <div 
+                                             key={r.id} 
+                                             className={cn(
+                                                "p-6 rounded-[2rem] border transition-all relative group/review",
+                                                r.status === 'approved' ? "bg-white/5 border-white/5" : "bg-amber-500/5 border-amber-500/20"
+                                             )}
+                                          >
+                                             <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-3">
+                                                   <div className="w-10 h-10 rounded-xl bg-black border border-white/5 flex items-center justify-center text-[10px] font-black text-white uppercase italic">
+                                                      {r.userName?.charAt(0) || "U"}
+                                                   </div>
+                                                   <div>
+                                                      <div className="text-[11px] font-black text-white uppercase tracking-tight">{r.userName}</div>
+                                                      <div className="flex gap-0.5 mt-0.5">
+                                                         {[1,2,3,4,5].map(star => (
+                                                            <Star 
+                                                               key={star} 
+                                                               size={8} 
+                                                               className={cn(star <= r.rating ? "text-amber-500 fill-amber-500" : "text-neutral-700")} 
+                                                            />
+                                                         ))}
+                                                      </div>
+                                                   </div>
+                                                </div>
+                                                <div className={cn(
+                                                   "px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest",
+                                                   r.status === 'approved' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                                                )}>
+                                                   {r.status || "PENDING"}
+                                                </div>
+                                             </div>
+                                             <p className="text-[11px] text-neutral-400 italic leading-relaxed mb-6 font-medium">"{r.comment}"</p>
+                                             
+                                             <div className="flex gap-2 opacity-0 group-hover/review:opacity-100 transition-opacity">
+                                                {r.status !== 'approved' && (
+                                                   <button 
+                                                      onClick={(e) => { e.stopPropagation(); handleUpdateReviewStatus(s.id, r.id, 'approved'); }}
+                                                      className="flex-1 py-2 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all"
+                                                   >
+                                                      Approve
+                                                   </button>
+                                                )}
+                                                <button 
+                                                   onClick={(e) => { e.stopPropagation(); handleRemoveReview(s.id, r.id); }}
+                                                   className="flex-1 py-2 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
+                                                >
+                                                   Remove
+                                                </button>
+                                             </div>
+                                             
+                                             <div className="absolute bottom-4 right-6 text-[8px] font-mono text-neutral-600 uppercase tracking-tighter">
+                                                {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "Historical Data"}
+                                             </div>
+                                          </div>
+                                       ))
+                                    ) : (
+                                       <div className="col-span-3 py-10 bg-white/5 border border-dashed border-white/5 rounded-[2rem] flex flex-col items-center justify-center text-neutral-600 gap-4">
+                                          <StarOff size={32} strokeWidth={1} />
+                                          <div className="text-[10px] font-black uppercase tracking-[0.2em]">Zero sentiment data detected</div>
+                                       </div>
+                                    )}
+                                 </div>
+                              </div>
                             </motion.div>
                           </td>
                         </tr>
@@ -2399,7 +2670,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
               <button 
                 onClick={() => {
                   setEditingId(null);
-                  setNewService({ title: "", excerpt: "", description: "", price: 0, isActive: true, category: "Maintenance", icon: "Wrench", notes: "", imageUrl: "", features: [], variants: [] });
+                  setNewService({ title: "", excerpt: "", description: "", price: 0, isActive: true, category: "Maintenance", icon: "Wrench", notes: "", imageUrl: "", features: [], variants: [], reviews: [] });
                 }}
                 className="text-[10px] text-text-dim hover:text-rose-500 font-black uppercase tracking-[0.2em] transition-colors"
               >
@@ -2439,7 +2710,15 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
             <div className="space-y-2.5">
               <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] flex justify-between items-center ml-1">
                 <span>Display Title</span>
-                <span className="text-accent-red text-[8px] tracking-widest italic opacity-50 uppercase">Public Interface</span>
+                <button 
+                  type="button" 
+                  onClick={() => handleResearchService()}
+                  disabled={researching || !newService.title}
+                  className="flex items-center gap-2 bg-cyan-500/10 text-cyan-400 px-3 py-1 rounded-lg border border-cyan-500/20 hover:bg-cyan-500 hover:text-white transition-all disabled:opacity-30"
+                >
+                  {researching ? <Loader2 size={10} className="animate-spin" /> : <SearchCode size={10} />}
+                  <span className="text-[8px] tracking-widest uppercase font-black">Search Grounding</span>
+                </button>
               </label>
               <input 
                 type="text" 
@@ -2711,6 +2990,19 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                                 <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim" />
                               </div>
                             </div>
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-text-dim uppercase tracking-widest ml-1 opacity-60">Engine Capacity / Rules</label>
+                              <input 
+                                type="text"
+                                value={v.engine || ""}
+                                onChange={(e) => updateVariant(idx, "engine", e.target.value)}
+                                placeholder="e.g. 1.2L, 1.5L, ALL"
+                                className="w-full text-[11px] font-black p-3 bg-black/40 border border-white/5 rounded-xl outline-none text-white focus:border-accent-red uppercase"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <label className="text-[9px] font-black text-text-dim uppercase tracking-widest ml-1 opacity-60">Override Value</label>
                               <div className="relative">
@@ -4979,8 +5271,16 @@ function TechniciansTab() {
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [newTech, setNewTech] = useState({ name: "", expertise: "", bio: "", experience: "", status: "available" as any, specialties: [] as string[] });
+  const [newTech, setNewTech] = useState({ name: "", expertise: "", bio: "", experience: "", status: "available" as any, specialties: [] as string[], userId: "", workingHours: { start: "09:00", end: "18:00" } });
   const [specialtyInput, setSpecialtyInput] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const unsubUsers = onSnapshot(query(collection(db, "users"), where("role", "==", "mechanic")), (snap) => {
+      setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubUsers();
+  }, []);
 
   const filteredTechnicians = technicians.filter(t => {
     return robustSearch(t, search, ["name", "expertise", "bio", "specialties", "experience", "id"]);
@@ -5016,7 +5316,7 @@ function TechniciansTab() {
           updatedAt: serverTimestamp()
         });
       }
-      setNewTech({ name: "", expertise: "", bio: "", experience: "", status: "available", specialties: [] });
+      setNewTech({ name: "", expertise: "", bio: "", experience: "", status: "available", specialties: [], userId: "", workingHours: { start: "09:00", end: "18:00" } });
       setShowAdd(false);
     } catch (err) { console.error(err); }
   };
@@ -5028,7 +5328,9 @@ function TechniciansTab() {
       bio: t.bio || "",
       experience: t.experience || "",
       status: t.status,
-      specialties: t.specialties || []
+      specialties: t.specialties || [],
+      userId: t.userId || "",
+      workingHours: t.workingHours || { start: "09:00", end: "18:00" }
     });
     setEditingId(t.id);
     setShowAdd(true);
@@ -5071,7 +5373,7 @@ function TechniciansTab() {
                   setShowAdd(!showAdd); 
                   if (!showAdd) { 
                     setEditingId(null); 
-                    setNewTech({ name: "", expertise: "", bio: "", experience: "", status: "available", specialties: [] }); 
+                    setNewTech({ name: "", expertise: "", bio: "", experience: "", status: "available", specialties: [], userId: "", workingHours: { start: "09:00", end: "18:00" } }); 
                   } 
                 }} 
                 className="px-8 py-4 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all shrink-0"
@@ -5177,6 +5479,20 @@ function TechniciansTab() {
                         </div>
                       </div>
                    </div>
+                   <div className="space-y-2">
+                       <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Linked Operator Account</label>
+                       <select 
+                         value={newTech.userId}
+                         onChange={(e) => setNewTech({...newTech, userId: e.target.value})}
+                         className="w-full bg-black/40 border border-white/10 p-4 rounded-xl text-sm font-black text-white"
+                       >
+                         <option value="">SELECT_MECHANIC_USER...</option>
+                         {users.map(u => (
+                           <option key={u.id} value={u.id}>{u.displayName || u.fullName} ({u.email})</option>
+                         ))}
+                       </select>
+                       <p className="text-[8px] text-text-dim/50 italic px-1 uppercase font-bold tracking-widest mt-1">Links this profile to an authenticated system user</p>
+                    </div>
                 </div>
                 <div className="space-y-6">
                    <div className="space-y-2">
@@ -5188,6 +5504,29 @@ function TechniciansTab() {
                         placeholder="e.g. 5+ Years"
                         className="w-full bg-black/40 border border-white/10 p-4 rounded-xl text-sm font-black text-white"
                       />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Deployment Window (Hours)</label>
+                      <div className="flex gap-4">
+                         <div className="flex-1">
+                            <label className="text-[8px] font-black text-neutral-600 uppercase tracking-widest mb-1 block">Start_Node</label>
+                            <input 
+                              type="time" 
+                              value={newTech.workingHours.start}
+                              onChange={(e) => setNewTech({...newTech, workingHours: {...newTech.workingHours, start: e.target.value}})}
+                              className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-xs font-black text-white"
+                            />
+                         </div>
+                         <div className="flex-1">
+                            <label className="text-[8px] font-black text-neutral-600 uppercase tracking-widest mb-1 block">End_Node</label>
+                            <input 
+                              type="time" 
+                              value={newTech.workingHours.end}
+                              onChange={(e) => setNewTech({...newTech, workingHours: {...newTech.workingHours, end: e.target.value}})}
+                              className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-xs font-black text-white"
+                            />
+                         </div>
+                      </div>
                    </div>
                    <div className="space-y-2">
                       <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Bio/Narrative</label>
@@ -6474,6 +6813,7 @@ function UsersTab({ locations }: { locations: any[] }) {
                                 className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-black text-white focus:border-primary outline-none appearance-none"
                             >
                                 <option value="customer">Customer</option>
+                                <option value="mechanic">Mechanic</option>
                                 <option value="admin">Admin / Manager</option>
                                 <option value="super_admin">Super Admin</option>
                             </select>
@@ -6579,6 +6919,7 @@ function UsersTab({ locations }: { locations: any[] }) {
                             className="bg-black/20 border border-white/5 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-white outline-none focus:border-primary transition-all appearance-none cursor-pointer hover:bg-black/40"
                         >
                             <option value="customer">CUSTOMER</option>
+                            <option value="mechanic">MECHANIC</option>
                             <option value="admin">ADMIN</option>
                             <option value="super_admin">SUPER_ADMIN</option>
                         </select>

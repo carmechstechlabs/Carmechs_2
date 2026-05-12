@@ -3,7 +3,7 @@ export interface UserProfile {
   email: string | null;
   fullName: string | null;
   displayName?: string | null;
-  role: 'admin' | 'customer' | 'super_admin';
+  role: 'admin' | 'customer' | 'super_admin' | 'mechanic';
   createdAt: any;
   photoURL?: string | null;
   phone?: string | null;
@@ -21,4 +21,5 @@ export type AuthState = {
   loading: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isMechanic: boolean;
 };

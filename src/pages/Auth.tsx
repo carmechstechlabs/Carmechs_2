@@ -29,7 +29,7 @@ import { useNavigate } from "react-router-dom";
 import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Auth() {
-  const { user } = useAuth();
+  const { user, isAdmin, isMechanic } = useAuth();
   const [mode, setMode] = useState<"login" | "signup" | "reset">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,9 +42,15 @@ export default function Auth() {
 
   React.useEffect(() => {
     if (user) {
-      navigate("/");
+      if (isAdmin) {
+        navigate("/admin");
+      } else if (isMechanic) {
+        navigate("/mechanic");
+      } else {
+        navigate("/");
+      }
     }
-  }, [user, navigate]);
+  }, [user, isAdmin, isMechanic, navigate]);
 
   const validateEmail = (email: string) => {
     return String(email)

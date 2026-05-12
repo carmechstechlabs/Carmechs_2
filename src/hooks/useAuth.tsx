@@ -13,6 +13,7 @@ const AuthContext = createContext<AuthState & { logout: () => Promise<void> }>({
   loading: true,
   isAdmin: false,
   isSuperAdmin: false,
+  isMechanic: false,
   logout: async () => {},
 });
 
@@ -74,9 +75,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const isSuperAdmin = user?.role === 'super_admin' || user?.email === 'carmechstechlabs@gmail.com';
+  const isMechanic = user?.role === 'mechanic';
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, isMechanic, logout }}>
       {children}
     </AuthContext.Provider>
   );

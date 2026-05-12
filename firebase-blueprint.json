@@ -40,6 +40,7 @@
       "description": "A technician who performs car services.",
       "type": "object",
       "properties": {
+        "userId": { "type": "string", "description": "Linked auth user ID" },
         "name": { "type": "string" },
         "expertise": { "type": "string" },
         "bio": { "type": "string" },
@@ -49,6 +50,13 @@
         "status": { "type": "string", "enum": ["available", "busy", "off"] },
         "experience": { "type": "string", "description": "e.g., '10+ Years'" },
         "specialties": { "type": "array", "items": { "type": "string" } },
+        "workingHours": {
+          "type": "object",
+          "properties": {
+             "start": { "type": "string" },
+             "end": { "type": "string" }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "status"]
@@ -80,6 +88,7 @@
               "make": { "type": "string" },
               "model": { "type": "string" },
               "fuel": { "type": "string" },
+              "engine": { "type": "string" },
               "price": { "type": "number" },
               "description": { "type": "string", "description": "Variant specific description" }
             }
@@ -91,10 +100,12 @@
           "items": {
             "type": "object",
             "properties": {
+              "id": { "type": "string" },
               "userId": { "type": "string" },
               "userName": { "type": "string" },
               "rating": { "type": "number" },
               "comment": { "type": "string" },
+              "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
               "createdAt": { "type": "string", "format": "date-time" }
             }
           },
@@ -127,7 +138,7 @@
       "properties": {
         "email": { "type": "string" },
         "fullName": { "type": "string" },
-        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "role": { "type": "string", "enum": ["customer", "admin", "mechanic"] },
         "referralCode": { "type": "string", "description": "Unique referral code for this user" },
         "referredBy": { "type": "string", "description": "User ID of the person who referred this user" },
         "bonusBalance": { "type": "number", "description": "Total reward points or credits earned" },
