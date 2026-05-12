@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, increment } from "firebase/firestore";
 import { cn } from "../lib/utils";
 import { useConfig } from "../hooks/useConfig";
 import { useAuth } from "../hooks/useAuth";
@@ -68,7 +68,9 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
     email: "",
     address: "",
     city: "Mumbai",
-    message: ""
+    message: "",
+    pointsRedeemed: 0,
+    discount: 0
   });
 
   useEffect(() => {
@@ -940,19 +942,40 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
              {dates.map((d, i) => {
                const dateStr = d.toISOString().split('T')[0];
                const isToday = i === 0;
+               const isSelected = data.appointmentDate === dateStr;
+               const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+               
                return (
                   <button 
                     key={i}
                     onClick={() => updateData({ ...data, appointmentDate: dateStr, appointmentTime: "" })}
                     className={cn(
-                      "p-3 rounded-2xl border-2 transition-all group flex flex-col items-center justify-center relative",
-                      data.appointmentDate === dateStr ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10" : "border-slate-50 bg-slate-50 hover:border-slate-200"
+                      "p-4 rounded-3xl border-2 transition-all group flex flex-col items-center justify-center relative",
+                      isSelected 
+                        ? "border-primary bg-primary text-white shadow-2xl shadow-primary/40 scale-110 z-10" 
+                        : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
                     )}
                   >
-                    {isToday && <div className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />}
-                    <div className="text-[8px] font-black uppercase tracking-tight opacity-50 mb-0.5">{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                    <div className="text-sm font-black italic leading-none">{d.getDate()}</div>
-                    <div className="text-[8px] font-bold opacity-30 mt-0.5">{d.toLocaleDateString('en-US', { month: 'short' })}</div>
+                    {isToday && !isSelected && <div className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white animate-pulse" />}
+                    <div className={cn(
+                      "text-[8px] font-black uppercase tracking-tight mb-0.5",
+                      isSelected ? "text-white/60" : isWeekend ? "text-rose-400" : "text-slate-400"
+                    )}>
+                      {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                    </div>
+                    <div className="text-lg font-black italic leading-none">{d.getDate()}</div>
+                    <div className={cn(
+                      "text-[8px] font-bold mt-0.5 uppercase",
+                      isSelected ? "text-white/60" : "text-slate-300"
+                    )}>
+                      {d.toLocaleDateString('en-US', { month: 'short' })}
+                    </div>
+                    {isSelected && (
+                      <motion.div 
+                        layoutId="active-date-glow"
+                        className="absolute inset-0 bg-primary/20 blur-xl rounded-full -z-10"
+                      />
+                    )}
                   </button>
                );
              })}
@@ -969,15 +992,17 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
              {times.map(t => {
                const isBooked = bookedSlots.includes(t);
+               const isSelected = data.appointmentTime === t;
                return (
                 <button 
                  key={t}
                  disabled={isBooked}
                  onClick={() => updateData({ ...data, appointmentTime: t })}
                  className={cn(
-                   "px-4 py-4 rounded-2xl border-2 transition-all text-[10px] font-black tracking-widest uppercase",
-                   data.appointmentTime === t ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10" : 
-                   isBooked ? "bg-slate-50 border-slate-50 text-slate-300 cursor-not-allowed line-through" : "border-slate-50 bg-slate-50 hover:border-slate-200"
+                   "px-4 py-5 rounded-3xl border-2 transition-all text-[11px] font-black tracking-widest uppercase relative overflow-hidden",
+                   isSelected 
+                     ? "border-primary bg-primary text-white shadow-xl shadow-primary/30 scale-105 z-10" 
+                     : isBooked ? "bg-slate-50 border-slate-50 text-slate-300 cursor-not-allowed line-through" : "border-slate-50 bg-slate-50 hover:border-slate-200"
                  )}
                 >
                   {t}
@@ -1504,6 +1529,7 @@ function ContactStep({ onNext, onBack, data, updateData }: StepProps) {
 }
 
 function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps & { goToStep: (s: number) => void }) {
+  const { user } = useAuth();
   const [showReview, setShowReview] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -1666,6 +1692,48 @@ function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps &
              </div>
              <p className="text-[8px] font-medium text-slate-400 uppercase tracking-widest mt-2">* Mechanic arrival window includes a 45-minute buffer for tactical deployment.</p>
           </div>
+
+          {!isExistingBooking && user && (
+            <div className="p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
+               <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                     <Gift className="text-emerald-500" size={18} />
+                     <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Loyalty Rewards</div>
+                  </div>
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{user.loyaltyPoints || 0} Points Available</div>
+               </div>
+               {data.pointsRedeemed > 0 ? (
+                 <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-emerald-200">
+                    <div className="text-[10px] font-black text-emerald-600 uppercase">Discount Applied: ₹{data.discount}</div>
+                    <button 
+                      onClick={() => updateData({ ...data, pointsRedeemed: 0, discount: 0, price: data.price + data.discount })}
+                      className="text-[9px] font-black text-rose-500 uppercase hover:underline"
+                    >
+                      Remove
+                    </button>
+                 </div>
+               ) : (
+                 <button 
+                   disabled={!(user.loyaltyPoints > 0)}
+                   onClick={() => {
+                     const pointsToRedeem = Math.min(user.loyaltyPoints, Math.floor(data.price * 0.2)); // Max 20% discount
+                     if (pointsToRedeem > 0) {
+                        updateData({ 
+                          ...data, 
+                          pointsRedeemed: pointsToRedeem, 
+                          discount: pointsToRedeem, 
+                          price: data.price - pointsToRedeem 
+                        });
+                        toast.success(`Protocol Activated: ₹${pointsToRedeem} discount synthesized.`);
+                     }
+                   }}
+                   className="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
+                 >
+                   Redeem Points for Discount
+                 </button>
+               )}
+            </div>
+          )}
        </div>
 
        <div className="bg-emerald-50 p-6 rounded-3xl border-2 border-emerald-100 flex items-center gap-4">
@@ -1850,6 +1918,19 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
          createdAt: serverTimestamp(),
          updatedAt: serverTimestamp()
        });
+
+       // Deduct points if redeemed
+       if (data.pointsRedeemed > 0 && auth.currentUser) {
+         try {
+           await updateDoc(doc(db, "users", auth.currentUser.uid), {
+             loyaltyPoints: increment(-data.pointsRedeemed),
+             updatedAt: serverTimestamp()
+           });
+           toast.info(`Protocol Adjustment: ${data.pointsRedeemed} loyalty points liquidated.`);
+         } catch (ptsErr) {
+           console.warn("Points deduction failed:", ptsErr);
+         }
+       }
 
        // Trigger Notification
        try {

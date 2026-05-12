@@ -83,7 +83,7 @@ const ICON_MAP: Record<string, any> = {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../lib/utils";
 import { db, auth } from "../lib/firebase";
-import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp, setDoc, addDoc, deleteDoc, serverTimestamp, getDoc, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp, setDoc, addDoc, deleteDoc, serverTimestamp, getDoc, getDocs, increment } from "firebase/firestore";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { useConfig } from "../hooks/useConfig";
 import { refundPayment } from "../lib/payment";
@@ -1180,7 +1180,7 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
     </div>
   );
 
-  const handleStatusUpdate = async (id: string, newStatus: string, email?: string, fullName?: string, carModel?: string, serviceType?: string, appointmentDate?: string, appointmentTime?: string) => {
+  const handleStatusUpdate = async (id: string, newStatus: string, email?: string, fullName?: string, carModel?: string, serviceType?: string, appointmentDate?: string, appointmentTime?: string, userId?: string, price?: number) => {
     try {
       const updatePayload: any = { 
         status: newStatus,
@@ -1191,6 +1191,28 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
       if (serviceType) updatePayload.serviceType = serviceType;
 
       await updateDoc(doc(db, "bookings", id), updatePayload);
+
+      // Award Loyalty Points on Completion
+      if (newStatus === "completed" && userId && userId !== "anonymous" && price) {
+        const bookingSnap = await getDoc(doc(db, "bookings", id));
+        if (bookingSnap.exists() && !bookingSnap.data().pointsAwarded) {
+          const pointsEarned = Math.floor(price / 10);
+          const userRef = doc(db, "users", userId);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            await updateDoc(userRef, {
+              loyaltyPoints: increment(pointsEarned),
+              updatedAt: serverTimestamp()
+            });
+            await updateDoc(doc(db, "bookings", id), {
+              pointsAwarded: true,
+              pointsEarned
+            });
+            toast.info(`Protocol Reward: ${pointsEarned} loyalty points archived to user node.`);
+          }
+        }
+      }
       
       // Trigger Server-Side Notification on Status Change
       if (email) {
@@ -1399,7 +1421,7 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                       <div className="flex items-center gap-3">
                         <select 
                           value={booking.status}
-                          onChange={(e) => handleStatusUpdate(booking.id, e.target.value, booking.email, booking.fullName, booking.carModel, booking.serviceType, booking.appointmentDate, booking.appointmentTime)}
+                          onChange={(e) => handleStatusUpdate(booking.id, e.target.value, booking.email, booking.fullName, booking.carModel, booking.serviceType, booking.appointmentDate, booking.appointmentTime, booking.userId, booking.price)}
                           className={cn(
                             "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none border-2 transition-all cursor-pointer",
                             booking.status === "in-progress" && "bg-blue-600/20 text-blue-400 border-blue-600/30 hover:border-blue-500",
@@ -1437,7 +1459,7 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                         {['pending', 'confirmed', 'in-progress', 'completed', 'cancelled'].map(status => (
                         <button 
                           key={status}
-                          onClick={() => handleStatusUpdate(booking.id, status, booking.email, booking.fullName, booking.carModel, booking.serviceType, booking.appointmentDate, booking.appointmentTime)}
+                          onClick={() => handleStatusUpdate(booking.id, status, booking.email, booking.fullName, booking.carModel, booking.serviceType, booking.appointmentDate, booking.appointmentTime, booking.userId, booking.price)}
                           className={cn(
                             "px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
                             booking.status === status 

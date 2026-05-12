@@ -51,7 +51,12 @@ export default function Profile() {
     // Subscribe to user's bookings
     const bq = query(collection(db, "bookings"), where("userId", "==", user.uid));
     const unsubBookings = onSnapshot(bq, (snap) => {
-      setBookings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a: any, b: any) => b.createdAt?.seconds - a.createdAt?.seconds));
+      const allBookings = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a: any, b: any) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB - dateA;
+      });
+      setBookings(allBookings);
     }, (err) => {
       console.warn("Profile bookings sync warning:", err.message);
     });
@@ -198,6 +203,13 @@ export default function Profile() {
                 <h2 className="text-2xl font-black text-ink tracking-tight mb-1">{user.fullName || "Car Owner"}</h2>
                 <div className="text-[10px] bg-slate-100 text-slate-500 font-black px-3 py-1 rounded-full uppercase tracking-widest inline-block mb-4">
                   {user.role}
+                </div>
+
+                <div className="bg-emerald-50 rounded-2xl p-4 mb-2 border border-emerald-100 w-full text-center">
+                  <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Loyalty Points</div>
+                  <div className="text-3xl font-black text-emerald-700 leading-none">
+                     {user.loyaltyPoints || 0}
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2 text-left mt-8 py-6 border-t border-slate-50">
@@ -355,25 +367,51 @@ export default function Profile() {
                     {vehicles.length === 0 && !showAddVehicle && (
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center py-4">No vehicles added yet</p>
                     )}
-                    {vehicles.map(v => (
-                      <div key={v.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-slate-50 shadow-sm group">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-primary-soft flex items-center justify-center text-primary font-black italic">
-                            {v.make[0]}
+                    {vehicles.map(v => {
+                      const vehicleHistory = bookings.filter(b => b.carDetails?.plate === v.plate);
+                      return (
+                        <div key={v.id} className="space-y-2">
+                          <div className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-slate-50 shadow-sm group">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-xl bg-primary-soft flex items-center justify-center text-primary font-black italic">
+                                {v.make[0]}
+                              </div>
+                              <div>
+                                <div className="text-sm font-black text-ink tracking-tight">{v.make} {v.model}</div>
+                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{v.year} • {v.plate}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {vehicleHistory.length > 0 && (
+                                <button className="text-[9px] font-black uppercase text-primary tracking-widest px-2 py-1 bg-primary/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {vehicleHistory.length} Services
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => handleDeleteVehicle(v.id)}
+                                className="opacity-0 group-hover:opacity-100 p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                              >
+                                <LogOut size={16} />
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-sm font-black text-ink tracking-tight">{v.make} {v.model}</div>
-                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{v.year} • {v.plate}</div>
-                          </div>
+                          {vehicleHistory.length > 0 && (
+                            <div className="ml-12 pl-4 border-l-2 border-slate-100 space-y-2 pb-4">
+                               {vehicleHistory.map(b => (
+                                 <div key={b.id} className="flex items-center justify-between p-3 bg-white/50 rounded-xl border border-slate-50 text-[10px] group">
+                                    <div className="flex items-center gap-2">
+                                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                       <span className="font-black text-ink uppercase">{b.serviceType}</span>
+                                       <span className="text-slate-400 font-medium">({new Date(b.appointmentDate).toLocaleDateString()})</span>
+                                    </div>
+                                    <div className="font-black text-primary italic">₹{b.price}</div>
+                                 </div>
+                               ))}
+                            </div>
+                          )}
                         </div>
-                        <button 
-                          onClick={() => handleDeleteVehicle(v.id)}
-                          className="opacity-0 group-hover:opacity-100 p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                        >
-                          <LogOut size={16} />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 

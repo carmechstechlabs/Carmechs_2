@@ -7,7 +7,9 @@ export default function WhatsAppButton() {
   
   if (config.whatsappEnabled === false) return null;
 
-  const whatsappUrl = `https://wa.me/91${config.whatsappNumber || config.supportPhone || '9831231431'}?text=Hi! I want to know more about your car services.`;
+  const rawNumber = config.whatsappNumber || config.supportPhone || '9831231431';
+  const cleanNumber = rawNumber.replace(/\D/g, '');
+  const whatsappUrl = `https://wa.me/${cleanNumber.startsWith('91') ? '' : '91'}${cleanNumber}?text=Hi! I want to know more about your car services.`;
 
   return (
     <a
