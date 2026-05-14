@@ -74,14 +74,14 @@ export const initializePayment = async (options: PaymentOptions, method: string 
      };
   }
 
-  if (method === "paytm") {
-    // Paytm redirect logic would normally go here
+  if (method === "paytm" || method === "phonepe") {
+    // Paytm/PhonePe redirect logic would normally go here
     // For this implementation, we'll simulate the gateway interaction
-    // in a real app, you'd use the Paytm JS Checkout or redirect to their pg
-    console.log("Paytm Gateway engaged. Mid:", order.mid);
+    const gatewayName = method === "paytm" ? "Paytm" : "PhonePe";
+    console.log(`${gatewayName} Gateway engaged. Mid:`, order.mid);
     return new Promise((resolve) => {
        setTimeout(() => {
-          resolve({ id: "paytm_" + Date.now(), orderId: order.id, status: "success" });
+          resolve({ id: `${method}_` + Date.now(), orderId: order.id, status: "success" });
        }, 2000);
     });
   }

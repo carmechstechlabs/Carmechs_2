@@ -6,6 +6,7 @@ import {
 } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
+import { handleFirestoreError, OperationType } from "../lib/firestoreErrorHandler";
 import { UserProfile, AuthState } from "../types";
 
 const AuthContext = createContext<AuthState & { logout: () => Promise<void> }>({
@@ -55,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           setLoading(false);
         }, (err) => {
-          console.error("User profile sync error:", err);
+          handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
           setLoading(false);
         });
 

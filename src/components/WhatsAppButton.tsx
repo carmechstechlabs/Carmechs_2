@@ -8,8 +8,17 @@ export default function WhatsAppButton() {
   if (config.whatsappEnabled === false) return null;
 
   const rawNumber = config.whatsappNumber || config.supportPhone || '9831231431';
-  const cleanNumber = rawNumber.replace(/\D/g, '');
-  const whatsappUrl = `https://wa.me/${cleanNumber.startsWith('91') ? '' : '91'}${cleanNumber}?text=Hi! I want to know more about your car services.`;
+  
+  // Clean number: remove non-digits
+  let cleanNumber = rawNumber.replace(/\D/g, '');
+  
+  // Remove leading zeros if present (common in some formats)
+  cleanNumber = cleanNumber.replace(/^0+/, '');
+  
+  // If number doesn't start with 91 and is 10 digits, assume it's an Indian number and prepend 91
+  const finalNumber = (cleanNumber.length === 10 && !cleanNumber.startsWith('91')) ? `91${cleanNumber}` : cleanNumber;
+  
+  const whatsappUrl = `https://wa.me/${finalNumber}?text=${encodeURIComponent('Hi! I want to know more about your car services.')}`;
 
   return (
     <a

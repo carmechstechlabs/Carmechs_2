@@ -22,6 +22,7 @@ import {
   X,
   Check,
   MapPin,
+  Gift,
   ChevronDown,
   Wind,
   Shield,
@@ -30,7 +31,7 @@ import {
 } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, increment } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDoc, doc, updateDoc, increment, orderBy } from "firebase/firestore";
 import { cn } from "../lib/utils";
 import { useConfig } from "../hooks/useConfig";
 import { useAuth } from "../hooks/useAuth";
@@ -45,6 +46,7 @@ interface StepProps {
   data: any;
   updateData: (newData: any) => void;
   onComplete?: () => void;
+  userGarage?: any[];
   key?: string;
 }
 
@@ -70,7 +72,8 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
     city: "Mumbai",
     message: "",
     pointsRedeemed: 0,
-    discount: 0
+    discount: 0,
+    saveVehicle: false
   });
 
   useEffect(() => {
@@ -83,6 +86,12 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
           phone: u.phoneNumber || prev.phone
         }));
         
+        // Fetch User's Tactical Garage
+        const q = query(collection(db, "users", u.uid, "garage"), orderBy("createdAt", "desc"));
+        const unsubGarage = onSnapshot(q, (snap) => {
+          setUserGarage(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
         // Fetch additional profile info if needed
         getDoc(doc(db, "users", u.uid)).then(snap => {
           if (snap.exists()) {
@@ -96,6 +105,10 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
             }));
           }
         });
+
+        return () => unsubGarage();
+      } else {
+        setUserGarage([]);
       }
     });
     return unsubAuth;
@@ -157,6 +170,7 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
 
   const [technicians, setTechnicians] = useState<any[]>([]);
   const [loadingTechs, setLoadingTechs] = useState(true);
+  const [userGarage, setUserGarage] = useState<any[]>([]);
 
   useEffect(() => {
     // Show only available technicians as requested
@@ -181,14 +195,14 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
           <motion.div 
             className="h-full bg-primary"
             initial={{ width: "0%" }}
-            animate={{ width: `${(step / 7) * 100}%` }}
+            animate={{ width: `${(step / 8) * 100}%` }}
           />
         </div>
 
         <div className="px-12 pt-12 pb-6 flex items-center justify-between relative z-10 border-b border-slate-50">
            <div className="flex-1">
              <div className="flex items-center gap-3 mb-4">
-                {[1, 2, 3, 4, 5, 6, 7].map(s => (
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                   <div key={s} className="flex items-center">
                     <motion.div 
                       className={cn(
@@ -200,7 +214,7 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
                     >
                       {s < step ? <CheckCircle2 size={14} /> : s}
                     </motion.div>
-                    {s < 7 && <div className={cn("w-4 h-0.5 mx-1", s < step ? "bg-emerald-200" : "bg-slate-50")} />}
+                    {s < 8 && <div className={cn("w-4 h-0.5 mx-1", s < step ? "bg-emerald-200" : "bg-slate-50")} />}
                   </div>
                 ))}
              </div>
@@ -213,7 +227,8 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
                    {step === 4 && "Deployment Logic"}
                    {step === 5 && "Operator Intel"}
                    {step === 6 && "Mission Control"}
-                   {step === 7 && "Mission Success"}
+                   {step === 7 && "Secure Terminal"}
+                   {step === 8 && "Mission Success"}
                 </h2>
              </div>
            </div>
@@ -231,6 +246,7 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
                   key="v" 
                   onNext={nextStep} 
                   data={bookingData.carDetails} 
+                  userGarage={userGarage}
                   updateData={(d) => setBookingData(prev => ({ ...prev, carDetails: d }))} 
                />
              )}
@@ -281,6 +297,16 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
                />
              )}
              {step === 7 && (
+               <PaymentStep
+                  key="p"
+                  onNext={nextStep}
+                  onBack={backStep}
+                  data={bookingData}
+                  updateData={(d) => setBookingData(prev => ({ ...prev, ...d }))}
+                  onComplete={() => setStep(8)}
+               />
+             )}
+             {step === 8 && (
                <SuccessStep
                   key="success"
                   data={bookingData}
@@ -316,29 +342,63 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
       exit={{ opacity: 0, x: -20 }}
       className="space-y-8"
     >
-      <div className="grid gap-4">
-        {branches.map(b => (
-          <button
-            key={b.id}
-            onClick={() => { updateData({ name: b.name, id: b.id }); onNext(); }}
-            className={cn(
-              "p-6 rounded-[2rem] border-2 text-left transition-all group flex items-start gap-4",
-              data === b.name ? "border-primary bg-primary-soft" : "border-slate-50 bg-slate-50 hover:border-slate-200"
-            )}
-          >
-            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm", data === b.name ? "bg-white text-primary" : "bg-white text-slate-300 group-hover:text-primary")}>
-              <ShieldCheck size={24} />
-            </div>
-            <div className="flex-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">{b.region || b.city}</div>
-              <h4 className="text-lg font-black text-ink uppercase italic tracking-tight mb-2">{b.name}</h4>
-              <p className="text-xs font-medium text-slate-500 flex items-center gap-2">
-                <Calendar size={12} /> {b.address}
-              </p>
-            </div>
-            <ChevronRight size={20} className="text-slate-200 self-center" />
-          </button>
-        ))}
+      <div className="grid gap-6">
+        {branches.map(b => {
+          const isSelected = data === b.name;
+          return (
+            <button
+              key={b.id}
+              onClick={() => { updateData({ name: b.name, id: b.id }); onNext(); }}
+              className={cn(
+                "p-8 rounded-[3rem] border-4 text-left transition-all group flex items-start gap-6 relative overflow-hidden",
+                isSelected 
+                  ? "border-primary bg-primary/5 shadow-2xl shadow-primary/10 scale-[1.02]" 
+                  : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
+              )}
+            >
+              <div className={cn(
+                "w-16 h-16 rounded-[2rem] flex items-center justify-center shrink-0 shadow-lg transition-transform group-hover:scale-110", 
+                isSelected ? "bg-primary text-white" : "bg-white text-slate-300 group-hover:text-primary"
+              )}>
+                <MapPin size={28} />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-1.5">
+                  <div className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full", isSelected ? "bg-primary text-white" : "bg-slate-200 text-slate-500")}>
+                    {b.region || b.city || "Operational Hub"}
+                  </div>
+                  {isSelected && (
+                    <div className="flex items-center gap-1 text-[10px] font-black text-primary uppercase animate-pulse">
+                      <Zap size={10} /> Active Selection
+                    </div>
+                  )}
+                </div>
+                <h4 className="text-2xl font-black text-ink uppercase italic tracking-tighter mb-2">{b.name}</h4>
+                <p className="text-xs font-medium text-slate-500 flex items-center gap-2">
+                  <Globe size={14} className="text-primary/40" /> {b.address}
+                </p>
+              </div>
+              {isSelected && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0 }} 
+                  animate={{ opacity: 1, scale: 1 }} 
+                  className="absolute right-8 top-1/2 -translate-y-1/2 text-primary"
+                >
+                  <CheckCircle2 size={32} />
+                </motion.div>
+              )}
+              {!isSelected && <ChevronRight size={24} className="text-slate-200 self-center group-hover:text-primary transition-colors" />}
+              
+              {isSelected && (
+                <motion.div 
+                  className="absolute bottom-0 left-0 h-1 bg-primary"
+                  initial={{ width: 0 }}
+                  animate={{ width: "100%" }}
+                />
+              )}
+            </button>
+          );
+        })}
         {branches.length === 0 && (
           <div className="py-20 text-center border-4 border-dashed border-slate-50 rounded-[3rem] space-y-4">
              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
@@ -353,12 +413,57 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
   );
 }
 
-function VehicleStep({ onNext, data, updateData }: StepProps) {
+function VehicleStep({ onNext, data, updateData, userGarage = [] }: StepProps) {
   const [search, setSearch] = useState("");
   const [carHub, setCarHub] = useState<any>({});
   const [step, setStep] = useState(1); // 1: Brand, 2: Model, 3: Fuel, 4: Details
-  const [savedVehicles, setSavedVehicles] = useState<any[]>([]);
-  const { user } = useAuth();
+  const [isManualInput, setIsManualInput] = useState(false);
+  const [manualMake, setManualMake] = useState("");
+  const [manualModel, setManualModel] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { user: authUser } = useAuth();
+
+  const validateStep3 = () => {
+    const newErrors: Record<string, string> = {};
+    const currentYear = new Date().getFullYear();
+    const yearNum = parseInt(data.year);
+
+    if (!data.fuel) newErrors.fuel = "Required";
+    
+    if (data.year && (isNaN(yearNum) || yearNum < 1980 || yearNum > currentYear)) {
+      newErrors.year = `Valid: 1980-${currentYear}`;
+    }
+
+    if (data.plate && (data.plate.length < 4 || data.plate.length > 15)) {
+      newErrors.plate = "Length: 4-15 chars";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  useEffect(() => {
+    // Basic real-time validation for step 3
+    if (step === 3) {
+      const currentYear = new Date().getFullYear();
+      const yearNum = parseInt(data.year);
+      const newErrors: Record<string, string> = { ...errors };
+
+      if (data.year && (isNaN(yearNum) || yearNum < 1980 || yearNum > currentYear)) {
+         newErrors.year = `Invalid Year (1980-${currentYear})`;
+      } else {
+         delete newErrors.year;
+      }
+
+      if (data.plate && (data.plate.length < 4 || data.plate.length > 15)) {
+         newErrors.plate = "Plate length must be 4-15 characters";
+      } else {
+         delete newErrors.plate;
+      }
+
+      setErrors(newErrors);
+    }
+  }, [data.year, data.plate, step]);
 
   useEffect(() => {
     return onSnapshot(collection(db, "carBrands"), (snapshot) => {
@@ -382,14 +487,17 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
   }, []);
 
   const searchLower = search.toLowerCase();
+  const searchTerms = searchLower.split(/\s+/).filter(t => t.length > 0);
+
+  const fuzzyMatch = (text: string) => {
+    if (searchTerms.length === 0) return false;
+    return searchTerms.every(term => text.toLowerCase().includes(term));
+  };
   
   // Simultaneous filtering
   const searchResults = search.length > 1 ? Object.entries(carHub).flatMap(([brand, details]: [string, any]) => 
     details.models
-      .filter((model: any) => 
-        brand.toLowerCase().includes(searchLower) || 
-        model.name.toLowerCase().includes(searchLower)
-      )
+      .filter((model: any) => fuzzyMatch(`${brand} ${model.name}`))
       .map((model: any) => ({
         brand,
         brandLogo: details.logo,
@@ -398,7 +506,14 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
       }))
   ) : [];
 
-  const makes = Object.keys(carHub).filter(m => m.toLowerCase().includes(searchLower));
+  const makes = Object.keys(carHub).filter(m => fuzzyMatch(m) || search.length <= 1);
+  
+  // Highlight popular brands visually
+  const featuredBrands = ["Maruti Suzuki", "Hyundai", "Toyota", "Honda", "Tata", "Mahindra"];
+  const displayMakes = search.length <= 1 
+    ? [...new Set([...featuredBrands.filter(f => carHub[f]), ...makes])]
+    : makes;
+
   const selectedBrand = data.make ? carHub[data.make] : null;
   const models = selectedBrand ? selectedBrand.models.filter((m: any) => m.name.toLowerCase().includes(searchLower)) : [];
 
@@ -409,6 +524,44 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6"
     >
+       {authUser && userGarage.length > 0 && step === 1 && search.length <= 1 && (
+         <div className="space-y-4">
+           <div className="text-[10px] font-black uppercase tracking-widest text-primary ml-1">Your Tactical Fleet</div>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-8">
+             {userGarage.map((v: any) => (
+               <button
+                 key={v.id}
+                 onClick={() => {
+                   updateData({ 
+                     ...data, 
+                     make: v.make, 
+                     model: v.model,
+                     year: v.year,
+                     plate: v.plate,
+                     engine: v.engine || "",
+                     brandLogo: carHub[v.make]?.logo || ""
+                   });
+                   onNext(); // Skip straight to step 2/3
+                 }}
+                 className="flex items-center gap-4 p-4 rounded-3xl border-2 border-primary-soft bg-primary-soft/30 hover:border-primary hover:bg-white transition-all group text-left shadow-sm"
+               >
+                 <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shrink-0 border border-primary/10 transition-transform group-hover:scale-110">
+                    <Car size={24} className="text-primary" />
+                 </div>
+                 <div className="flex-1">
+                   <div className="text-[9px] font-black uppercase text-primary tracking-widest leading-none mb-1">{v.make} {v.model}</div>
+                   <div className="text-xs font-black text-ink italic uppercase tracking-tighter">{v.plate}</div>
+                 </div>
+                 <ChevronRight size={16} className="text-primary/40 group-hover:text-primary" />
+               </button>
+             ))}
+           </div>
+           <div className="relative py-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100" /></div>
+              <div className="relative flex justify-center text-[8px] font-black uppercase tracking-[0.3em] text-slate-300 bg-white px-2">OR NEW CONFIGURATION</div>
+           </div>
+         </div>
+       )}
        {/* Search Bar */}
        <div className="relative group">
          <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
@@ -418,12 +571,90 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
            type="text" 
            placeholder="Search across all brands & models..."
            value={search}
-           onChange={(e) => setSearch(e.target.value)}
+           onChange={(e) => { setSearch(e.target.value); setIsManualInput(false); }}
            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-16 pr-6 py-5 outline-none focus:border-primary transition-all font-bold text-ink"
          />
        </div>
 
-        {search.length > 1 && searchResults.length > 0 && (
+        {search.length > 0 && !isManualInput && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 bg-primary/5 p-4 rounded-2xl border border-primary/20">
+               <AlertCircle size={18} className="text-primary shrink-0" />
+               <div className="text-[10px] font-bold text-primary uppercase tracking-tight">
+                  Unit not found in our tactical database? Execute switch to Manual Profile Uplink.
+               </div>
+            </div>
+            <button 
+              onClick={() => {
+                setIsManualInput(true);
+                setManualMake("");
+                setManualModel("");
+              }}
+              className="w-full py-4 text-[10px] font-black uppercase tracking-widest text-primary bg-white rounded-2xl border-2 border-dashed border-primary/20 hover:border-primary hover:bg-primary-soft transition-all"
+            >
+              Cannot find your unit? Switch to Manual Entry
+            </button>
+          </div>
+        )}
+
+        {isManualInput ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6 bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100"
+          >
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Manual Make Input</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. BMW"
+                  value={manualMake}
+                  onChange={(e) => setManualMake(e.target.value)}
+                  className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Manual Model Input</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. X5"
+                  value={manualModel}
+                  onChange={(e) => setManualModel(e.target.value)}
+                  className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Manufacture Year</label>
+                <input 
+                  type="text"
+                  maxLength={4}
+                  placeholder="e.g. 2022"
+                  value={data.year || ""}
+                  onChange={(e) => updateData({ ...data, year: e.target.value.replace(/\D/g, "") })}
+                  className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink"
+                />
+              </div>
+            </div>
+            <button 
+              disabled={!manualMake || !manualModel}
+              onClick={() => {
+                updateData({ 
+                  ...data, 
+                  make: manualMake, 
+                  model: manualModel,
+                  brandLogo: "",
+                  modelLogo: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(manualMake)}&backgroundColor=334155`
+                });
+                setStep(3);
+                setIsManualInput(false);
+              }}
+              className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30"
+            >
+              Verify Tactical Specs
+            </button>
+          </motion.div>
+        ) : search.length > 1 && searchResults.length > 0 && (
          <div className="space-y-4">
            <div className="text-[10px] font-black uppercase tracking-widest text-primary ml-1">Detected Vehicle Profiles</div>
            <div className="grid grid-cols-1 gap-3 pb-8">
@@ -572,37 +803,55 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
               </label>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                  {(() => {
+                   const commonFuels = ["Petrol", "Diesel", "Electric", "Hybrid", "CNG"];
                    const selectedModelObj = carHub[data.make]?.models.find((m: any) => m.name === data.model);
-                   const availableFuels = selectedModelObj?.fuelTypes || ["Petrol", "Diesel", "CNG", "Electric"];
+                   const availableFuels = selectedModelObj?.fuelTypes && selectedModelObj.fuelTypes.length > 0 
+                     ? selectedModelObj.fuelTypes 
+                     : commonFuels;
                    const fuelIcons: any = {
                      "Petrol": { icon: Fuel, color: "text-amber-500", bg: "bg-amber-50" },
                      "Diesel": { icon: Droplets, color: "text-blue-500", bg: "bg-blue-50" },
                      "CNG": { icon: Wind, color: "text-emerald-500", bg: "bg-emerald-50" },
                      "Electric": { icon: Zap, color: "text-cyan-500", bg: "bg-cyan-50" },
                      "Hybrid": { icon: Zap, color: "text-indigo-500", bg: "bg-indigo-50" },
-                     "LPG": { icon: Fuel, color: "text-orange-500", bg: "bg-orange-50" }
+                     "LPG": { icon: Fuel, color: "text-orange-500", bg: "bg-orange-50" },
+                     "Manual": { icon: Droplets, color: "text-primary", bg: "bg-primary-soft" }
                    };
-                   return availableFuels.map((fName: string) => {
+                   const fuels = [...(availableFuels || []), "Manual"];
+                   return fuels.map((fName: string) => {
                       const f = fuelIcons[fName] || { icon: Fuel, color: "text-slate-500", bg: "bg-amber-50" };
+                      const isSelected = data.fuel === fName;
                       return (
-                       <button 
-                         key={fName} 
-                         onClick={() => updateData({ ...data, fuel: fName })}
-                         className={cn(
-                           "p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 group relative overflow-hidden",
-                           data.fuel === fName ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
+                       <div key={fName} className="space-y-3">
+                         <button 
+                           onClick={() => updateData({ ...data, fuel: fName })}
+                           className={cn(
+                             "w-full p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 group relative overflow-hidden",
+                             isSelected ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10 scale-105" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
+                           )}
+                         >
+                           {isSelected && (
+                             <motion.div layoutId="fuel-check" className="absolute top-2 right-2 text-primary">
+                               <CheckCircle2 size={14} />
+                             </motion.div>
+                           )}
+                           <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform", isSelected ? "bg-white" : f.bg)}>
+                             <f.icon size={20} className={f.color} />
+                           </div>
+                           <span className="font-black uppercase text-[10px] tracking-widest">{fName}</span>
+                         </button>
+                         {fName === "Manual" && isSelected && (
+                           <motion.input 
+                             initial={{ opacity: 0, y: -10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             type="text"
+                             placeholder="Specify Fuel..."
+                             value={data.manualFuel || ""}
+                             onChange={(e) => updateData({ ...data, manualFuel: e.target.value.toUpperCase() })}
+                             className="w-full bg-white border-2 border-primary/20 rounded-2xl px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary shadow-sm"
+                           />
                          )}
-                       >
-                         {data.fuel === fName && (
-                           <motion.div layoutId="fuel-check" className="absolute top-2 right-2 text-primary">
-                             <CheckCircle2 size={12} />
-                           </motion.div>
-                         )}
-                         <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform", f.bg)}>
-                           <f.icon size={20} className={f.color} />
-                         </div>
-                         <span className="font-black uppercase text-[10px] tracking-widest">{fName}</span>
-                       </button>
+                       </div>
                       );
                     });
                  })()}
@@ -610,63 +859,100 @@ function VehicleStep({ onNext, data, updateData }: StepProps) {
             </div>
 
             <div className="bg-slate-50 p-10 rounded-[3rem] border-2 border-white space-y-10 shadow-inner">
-               <div className="grid md:grid-cols-3 gap-6">
-                 <div className="space-y-4">
-                   <div className="flex items-center justify-between ml-4">
-                     <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Manufacture Year</label>
-                     <Calendar size={14} className="text-slate-300" />
-                   </div>
-                   <input 
-                     type="text" 
-                     maxLength={4}
-                     placeholder="e.g. 2022"
-                     value={data.year}
-                     onChange={(e) => {
-                       const val = e.target.value.replace(/\D/g, "");
-                       updateData({ ...data, year: val });
-                     }}
-                     className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink text-xl tracking-[0.2em] shadow-sm text-center"
-                   />
-                 </div>
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between ml-4">
+                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Manufacture Year <span className="text-[8px] opacity-60">(Optional)</span></label>
+                      <Calendar size={14} className="text-slate-300" />
+                    </div>
+                    <input 
+                      type="text" 
+                      maxLength={4}
+                      placeholder="e.g. 2022"
+                      value={data.year}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        updateData({ ...data, year: val });
+                      }}
+                      className={cn(
+                        "w-full bg-white border-2 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink text-xl tracking-[0.2em] shadow-sm text-center",
+                        errors.year ? "border-rose-300 bg-rose-50" : "border-slate-100"
+                      )}
+                    />
+                    {errors.year && <p className="text-[9px] font-black text-rose-500 uppercase tracking-tighter text-center mt-1">{errors.year}</p>}
+                  </div>
 
-                 <div className="space-y-4">
-                   <div className="flex items-center justify-between ml-4">
-                     <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Engine Cap.</label>
-                     <Gauge size={14} className="text-slate-300" />
-                   </div>
-                   <input 
-                     type="text" 
-                     placeholder="e.g. 1.2L"
-                     value={data.engine || ""}
-                     onChange={(e) => {
-                       updateData({ ...data, engine: e.target.value.toUpperCase() });
-                     }}
-                     className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink text-xl tracking-[0.1em] shadow-sm text-center"
-                   />
-                 </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between ml-4">
+                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Engine Cap. <span className="text-[8px] opacity-60">(Optional)</span></label>
+                      <Gauge size={14} className="text-slate-300" />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 1.2L"
+                      value={data.engine || ""}
+                      onChange={(e) => {
+                        updateData({ ...data, engine: e.target.value.toUpperCase() });
+                      }}
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink text-xl tracking-[0.1em] shadow-sm text-center"
+                    />
+                  </div>
 
-                 <div className="space-y-4">
-                   <div className="flex items-center justify-between ml-4">
-                     <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">License Plate</label>
-                     <Hash size={14} className="text-slate-300" />
-                   </div>
-                   <input 
-                     type="text" 
-                     placeholder="MH01AB1234"
-                     value={data.plate}
-                     onChange={(e) => {
-                       const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-                       updateData({ ...data, plate: val });
-                     }}
-                     className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink text-xl tracking-[0.2em] shadow-sm text-center uppercase"
-                   />
-                 </div>
-               </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between ml-4">
+                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">License Plate <span className="text-[8px] opacity-60">(Optional)</span></label>
+                      <Hash size={14} className="text-slate-300" />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="MH01AB1234"
+                      value={data.plate}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+                        updateData({ ...data, plate: val });
+                      }}
+                      className={cn(
+                        "w-full bg-white border-2 rounded-2xl px-6 py-4 outline-none focus:border-primary transition-all font-black text-ink text-xl tracking-[0.1em] shadow-sm text-center uppercase",
+                        errors.plate ? "border-rose-300 bg-rose-50" : "border-slate-100"
+                      )}
+                    />
+                    {errors.plate && <p className="text-[9px] font-black text-rose-500 uppercase tracking-tighter text-center mt-1">{errors.plate}</p>}
+                  </div>
+                </div>
+
+                {authUser && !userGarage.some(v => v.plate === data.plate && data.plate !== "") && (
+                  <div className="pt-6 border-t border-slate-200">
+                    <button 
+                      onClick={() => updateData({ ...data, saveVehicle: !data.saveVehicle })}
+                      className={cn(
+                        "flex items-center gap-4 px-6 py-4 rounded-2xl border-2 transition-all group w-full sm:w-auto",
+                        data.saveVehicle ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                        data.saveVehicle ? "bg-white border-white text-primary" : "border-slate-200"
+                      )}>
+                        {data.saveVehicle && <Check size={14} strokeWidth={4} />}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-[10px] font-black uppercase tracking-widest">Add to Tactical Garage</div>
+                        <div className={cn("text-[8px] font-bold uppercase tracking-tighter opacity-70", data.saveVehicle ? "text-white" : "text-slate-400")}>
+                          Save these specs for lightning-fast future deployment
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
             </div>
 
             <button 
-              disabled={!data.fuel || !data.year || data.year.length !== 4 || !data.plate}
-              onClick={onNext}
+              disabled={!data.fuel || Object.keys(errors).length > 0}
+              onClick={() => {
+                if (validateStep3()) {
+                   onNext();
+                }
+              }}
               className="w-full bg-primary text-white py-6 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.3em] shadow-2xl shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale disabled:scale-100 flex items-center justify-center gap-4 group"
             >
               Verify & Lock Profile
@@ -753,7 +1039,7 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
     if (isSelected) {
       newCart = cart.filter((item: any) => item.id !== s.id);
     } else {
-      newCart = [...cart, { id: s.id, title: s.title, price: finalPrice }];
+      newCart = [...cart, { id: s.id, title: s.title, price: finalPrice, isVariant: !!variant }];
     }
     const total = newCart.reduce((acc: number, item: any) => acc + item.price, 0);
     updateData({ 
@@ -815,16 +1101,20 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
                 </button>
                 {/* Variant Selector */}
                 {s.variants && s.variants.length > 0 && isSelected && (
-                  <div className="pl-16 space-y-3 pb-4">
+                  <div className="pl-16 space-y-4 pb-6 pt-2">
                     <div className="flex items-center justify-between mr-6">
-                      <div className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">Manual Model Calibration</div>
-                      {!variant && <div className="text-[8px] font-bold text-amber-500 uppercase tracking-tighter animate-pulse">Specific Specs Missing • Review Fallback</div>}
+                      <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em] flex items-center gap-2">
+                        <Wrench size={10} /> Dynamic Price Recalibration
+                      </div>
+                      {!variant && <div className="text-[9px] font-black text-amber-500 bg-amber-50 px-3 py-1 rounded-full uppercase tracking-widest animate-pulse border border-amber-100 flex items-center gap-1">
+                        <AlertCircle size={10} /> Review Standard Pricing
+                      </div>}
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                        {s.variants.map((v: any, vIdx: number) => {
-                         const vMatches = v.make.toLowerCase() === data.carDetails.make.toLowerCase() && 
-                                           (v.model.toLowerCase() === 'all' || v.model.toLowerCase() === data.carDetails.model.toLowerCase()) &&
-                                           (v.fuel.toLowerCase() === 'all' || v.fuel.toLowerCase() === data.carDetails.fuel.toLowerCase());
+                         const isMatch = v.make.toLowerCase() === data.carDetails.make.toLowerCase() && 
+                                            (v.model.toLowerCase() === 'all' || v.model.toLowerCase() === data.carDetails.model.toLowerCase()) &&
+                                            (v.fuel.toLowerCase() === 'all' || v.fuel.toLowerCase() === data.carDetails.fuel.toLowerCase());
                          const isChosen = cart.find((item: any) => item.id === s.id)?.price === v.price;
                          return (
                            <button 
@@ -835,12 +1125,16 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
                                updateData({ ...data, cart: newCart, price: total });
                              }}
                              className={cn(
-                               "px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all",
-                               isChosen ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" : 
-                               vMatches ? "bg-primary/5 border-primary/10 text-primary" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                               "px-4 py-4 rounded-2xl border-2 text-[10px] font-black uppercase tracking-widest transition-all text-left flex items-center justify-between",
+                               isChosen ? "bg-primary text-white border-primary shadow-xl shadow-primary/20 scale-[1.02]" : 
+                               isMatch ? "bg-primary-soft border-primary text-primary" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
                              )}
                            >
-                             {v.make} {v.model === 'all' ? 'Models' : v.model} • {v.fuel} • ₹{v.price}
+                             <div className="flex flex-col">
+                               <span className="opacity-80">{v.make} {v.model === 'all' ? 'Lineup' : v.model}</span>
+                               <span className="text-[8px] font-bold opacity-60 tracking-tighter">{v.fuel} Spec</span>
+                             </div>
+                             <div className={cn("text-sm font-black", isChosen ? "text-white" : "text-primary")}>₹{v.price}</div>
                            </button>
                          );
                        })}
@@ -877,7 +1171,28 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
   const [loadingMechanics, setLoadingMechanics] = useState(true);
   const [selectedMechanic, setSelectedMechanic] = useState<any>(null);
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const { user, isMechanic } = useAuth();
   
+  const toggleTechSlot = async (time: string, tech: any) => {
+    if (!user || !isMechanic || tech.userId !== user.uid) return;
+
+    const slotKey = `${data.appointmentDate}|${time}`;
+    const currentSlots = tech.unavailableSlots || [];
+    const newSlots = currentSlots.includes(slotKey) 
+      ? currentSlots.filter((s: string) => s !== slotKey)
+      : [...currentSlots, slotKey];
+
+    try {
+      await updateDoc(doc(db, "technicians", tech.id), {
+        unavailableSlots: newSlots,
+        updatedAt: serverTimestamp()
+      });
+      toast.success(currentSlots.includes(slotKey) ? "Slot marked available." : "Slot marked unavailable.");
+    } catch (err) {
+      toast.error("Failed to update availability uplink.");
+    }
+  };
+
   const dates = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(offset => {
     const d = new Date();
     d.setDate(d.getDate() + offset);
@@ -927,6 +1242,29 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
     updateData({ ...data, mechanicId: m.id, mechanicName: m.name });
   };
 
+  const isTimeSlotWithinWorkingHours = (slot: string, workingHours: { start: string, end: string }) => {
+    if (!workingHours) return true; // Default behavior
+    
+    const convertToNumber = (t: string) => {
+      let [time, ampm] = t.split(' ');
+      let [h, m] = time.split(':').map(Number);
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return h + (m / 60);
+    };
+
+    const convert24ToNumber = (t: string) => {
+      let [h, m] = t.split(':').map(Number);
+      return h + (m / 60);
+    };
+
+    const slotTime = convertToNumber(slot);
+    const start = convert24ToNumber(workingHours.start || "09:00");
+    const end = convert24ToNumber(workingHours.end || "18:00");
+
+    return slotTime >= start && slotTime < end;
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -935,9 +1273,23 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
       className="space-y-10"
     >
        <div className="space-y-6">
-          <label className="text-[10px] font-black uppercase tracking-widest text-primary ml-1 flex items-center gap-2">
-             <Calendar size={12} /> Service Availability Calendar
-          </label>
+          <div className="flex items-center justify-between ml-1">
+            <label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
+               <Calendar size={12} /> Service Availability Calendar
+            </label>
+            <div className="flex items-center gap-4">
+              <input 
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={data.appointmentDate}
+                onChange={(e) => updateData({ ...data, appointmentDate: e.target.value, appointmentTime: "" })}
+                className="text-[10px] font-black uppercase tracking-widest text-slate-900 bg-slate-100 px-4 py-2 rounded-xl border-2 border-slate-100 outline-none focus:border-primary transition-all shadow-sm"
+              />
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-3 py-1 rounded-full italic hidden sm:block">
+                {data.appointmentDate ? new Date(data.appointmentDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : dates[0].toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
              {dates.map((d, i) => {
                const dateStr = d.toISOString().split('T')[0];
@@ -953,7 +1305,7 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
                       "p-4 rounded-3xl border-2 transition-all group flex flex-col items-center justify-center relative",
                       isSelected 
                         ? "border-primary bg-primary text-white shadow-2xl shadow-primary/40 scale-110 z-10" 
-                        : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
+                        : "border-slate-50 bg-slate-100/50 hover:border-slate-200 hover:bg-white"
                     )}
                   >
                     {isToday && !isSelected && <div className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white animate-pulse" />}
@@ -963,7 +1315,7 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
                     )}>
                       {d.toLocaleDateString('en-US', { weekday: 'short' })}
                     </div>
-                    <div className="text-lg font-black italic leading-none">{d.getDate()}</div>
+                    <div className="text-xl font-black italic leading-none">{d.getDate()}</div>
                     <div className={cn(
                       "text-[8px] font-bold mt-0.5 uppercase",
                       isSelected ? "text-white/60" : "text-slate-300"
@@ -973,8 +1325,11 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
                     {isSelected && (
                       <motion.div 
                         layoutId="active-date-glow"
-                        className="absolute inset-0 bg-primary/20 blur-xl rounded-full -z-10"
+                        className="absolute inset-0 bg-primary/30 blur-xl rounded-full -z-10"
                       />
+                    )}
+                    {isSelected && (
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
                     )}
                   </button>
                );
@@ -987,73 +1342,152 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
             <label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
                <Clock size={12} /> Preferred Arrival Slot
             </label>
-            {bookedSlots.length > 0 && <span className="text-[8px] font-bold text-rose-400 uppercase tracking-widest">{bookedSlots.length} Slots Occupied</span>}
+            <div className="flex items-center gap-4">
+              {bookedSlots.length > 0 && <span className="text-[8px] font-bold text-rose-400 uppercase tracking-widest bg-rose-50 px-2 py-0.5 rounded-full">{bookedSlots.length} Slots Occupied</span>}
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Available</span>
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-             {times.map(t => {
+             {times
+               .filter(t => {
+                 if (!selectedMechanic) return true;
+                 return isTimeSlotWithinWorkingHours(t, selectedMechanic.workingHours);
+               })
+               .map(t => {
                const isBooked = bookedSlots.includes(t);
+               const isTechUnavailable = selectedMechanic?.unavailableSlots?.includes(`${data.appointmentDate}|${t}`);
                const isSelected = data.appointmentTime === t;
-               return (
-                <button 
-                 key={t}
-                 disabled={isBooked}
-                 onClick={() => updateData({ ...data, appointmentTime: t })}
-                 className={cn(
-                   "px-4 py-5 rounded-3xl border-2 transition-all text-[11px] font-black tracking-widest uppercase relative overflow-hidden",
-                   isSelected 
-                     ? "border-primary bg-primary text-white shadow-xl shadow-primary/30 scale-105 z-10" 
-                     : isBooked ? "bg-slate-50 border-slate-50 text-slate-300 cursor-not-allowed line-through" : "border-slate-50 bg-slate-50 hover:border-slate-200"
-                 )}
-                >
-                  {t}
-                </button>
-               );
+               const isDisabled = isBooked || isTechUnavailable;
+
+                return (
+                  <div key={t} className="relative">
+                    <button 
+                     disabled={isDisabled && !(isMechanic && selectedMechanic?.userId === user?.uid)}
+                     onClick={() => {
+                        if (isMechanic && selectedMechanic?.userId === user?.uid) {
+                           toggleTechSlot(t, selectedMechanic);
+                        } else {
+                           updateData({ ...data, appointmentTime: t });
+                        }
+                     }}
+                     className={cn(
+                       "w-full px-4 py-5 rounded-3xl border-2 transition-all text-xs font-black tracking-widest uppercase relative overflow-hidden",
+                       isSelected && !isMechanic
+                         ? "border-primary bg-primary text-white shadow-xl shadow-primary/30 scale-105 z-10" 
+                         : isDisabled && !(isMechanic && selectedMechanic?.userId === user?.uid) ? "bg-slate-50 border-slate-50 text-slate-300/50 cursor-not-allowed" : "border-slate-50 bg-slate-100/50 hover:border-primary/20 hover:bg-primary-soft hover:text-primary",
+                        isMechanic && selectedMechanic?.userId === user?.uid && isTechUnavailable && "border-rose-500 bg-rose-50 text-rose-500 opacity-100 grayscale-0 cursor-pointer"
+                     )}
+                    >
+                      {isDisabled && !isMechanic && <div className="absolute inset-0 bg-slate-200/20 backdrop-blur-[1px]" />}
+                      <span className="relative z-10">{t}</span>
+                      {isMechanic && selectedMechanic?.userId === user?.uid && isTechUnavailable && (
+                        <div className="absolute top-1 right-1">
+                          <X size={10} className="text-rose-500" />
+                        </div>
+                      )}
+                    </button>
+                    {isMechanic && selectedMechanic?.userId === user?.uid && (
+                       <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-slate-900 text-[6px] font-black text-white px-1.5 py-0.5 rounded-full uppercase tracking-widest opacity-0 hover:opacity-100 transition-opacity z-20 pointer-events-none whitespace-nowrap">
+                          Toggle Availability
+                       </div>
+                    )}
+                  </div>
+                );
              })}
           </div>
-       </div>
+         <div className="flex items-center justify-between ml-1">
+           <label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
+              <User size={12} /> Live Technician Availability
+           </label>
+           <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Real-time Grid</span>
+           </div>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {loadingMechanics ? (
+               <div className="col-span-full py-20 flex flex-col items-center justify-center space-y-4">
+                  <Loader2 size={32} className="text-primary animate-spin" />
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Syncing Technician Uplink...</div>
+               </div>
+            ) : mechanics.length > 0 ? (
+               mechanics
+                .filter(m => {
+                  // Refined filtering based on working hours and unavailable slots
+                  if (!data.appointmentTime || !data.appointmentDate) return true;
+                  
+                  const isTechUnavailable = m.unavailableSlots?.includes(`${data.appointmentDate}|${data.appointmentTime}`);
+                  if (isTechUnavailable) return false;
 
-       <div className="space-y-6">
-          <label className="text-[10px] font-black uppercase tracking-widest text-primary ml-1 flex items-center gap-2">
-             <User size={12} /> High-Tier Technician Allocation
-          </label>
-          <div className="grid md:grid-cols-2 gap-4">
-              {loadingMechanics ? (
-                 <div className="col-span-2 py-8 bg-slate-50 animate-pulse rounded-2xl" />
-              ) : mechanics.length > 0 ? (
-                mechanics.filter(m => m.status === "available").map(m => {
+                  const isWithinHours = isTimeSlotWithinWorkingHours(data.appointmentTime, m.workingHours);
+                  return isWithinHours;
+                })
+                .map(m => {
+                  const isSelected = data.mechanicId === m.id;
+                  const expertiseTags = m.expertise?.split(',') || [];
+                  
                   return (
                     <button 
                       key={m.id}
                       onClick={() => handleMechanicSelect(m)}
                       className={cn(
-                        "p-4 rounded-3xl border-2 transition-all flex items-center gap-4 text-left relative overflow-hidden group",
-                        data.mId === m.id ? "border-primary bg-primary-soft shadow-xl shadow-primary/5 scale-[1.02]" : "border-slate-50 bg-slate-50 hover:border-slate-100",
+                        "p-6 rounded-[2.5rem] border-2 transition-all flex flex-col items-center gap-5 text-center relative overflow-hidden group",
+                        isSelected ? "border-primary bg-primary-soft shadow-xl shadow-primary/10 scale-[1.05] z-10" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white hover:shadow-lg",
                       )}
                     >
-                      <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white shrink-0 relative border-2 border-white shadow-sm group-hover:scale-105 transition-transform">
-                         <img src={m.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${m.name}`} alt="" className="transition-all" />
-                         <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-                      </div>
-                      <div className="flex-1">
-                         <div className="font-black text-ink text-sm uppercase tracking-tight leading-none mb-1">
-                           {m.name}
-                         </div>
-                         <div className="text-[8px] font-black uppercase text-primary tracking-widest">{m.expertise}</div>
-                      </div>
-                      {data.mechanicId === m.id && (
-                        <div className="absolute top-2 right-2 text-primary animate-bounce">
-                          <CheckCircle2 size={16} />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="col-span-2 p-6 text-center text-[10px] font-black uppercase text-slate-400 bg-slate-50 rounded-2xl">
-                  No available technicians found
-                </div>
-              )}
-          </div>
+                    <div className="w-20 h-20 rounded-3xl overflow-hidden bg-white shrink-0 relative border-4 border-white shadow-md group-hover:scale-110 transition-transform">
+                       <img src={m.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${m.name}`} alt="" className="transition-all" />
+                       <div className={cn(
+                         "absolute bottom-0 right-0 w-5 h-5 border-4 border-white rounded-full",
+                         m.status === 'available' ? "bg-emerald-500 shadow-emerald-500/20" : "bg-rose-500 shadow-rose-500/20"
+                       )} />
+                    </div>
+                    
+                    <div className="space-y-1">
+                       <div className="font-black text-ink text-sm uppercase tracking-tighter leading-none">
+                         {m.name}
+                       </div>
+                       <div className="text-[9px] font-black uppercase text-primary tracking-widest mt-1">{m.expertise || "Master Tech"}</div>
+                    </div>
+
+                    <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                       {expertiseTags.map((tag: string, i: number) => (
+                         <span key={i} className="text-[7px] font-black uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-slate-100 text-slate-400 group-hover:text-primary transition-colors">
+                           {tag.trim()}
+                         </span>
+                       ))}
+                    </div>
+
+                    <div className={cn(
+                      "mt-auto pt-4 w-full flex items-center justify-center gap-2",
+                      isSelected ? "text-primary" : "text-slate-300"
+                    )}>
+                       <div className="h-0.5 flex-1 bg-current opacity-10 rounded-full" />
+                       <span className="text-[8px] font-black uppercase tracking-widest">{isSelected ? "SELECTED_TECH" : "OPERATIONAL"}</span>
+                       <div className="h-0.5 flex-1 bg-current opacity-10 rounded-full" />
+                    </div>
+
+                    {isSelected && (
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute top-4 right-6 text-primary"
+                      >
+                        <CheckCircle2 size={18} />
+                      </motion.div>
+                    )}
+                  </button>
+                );
+            })
+          ) : (
+            <div className="col-span-full p-6 text-center text-[10px] font-black uppercase text-slate-400 bg-slate-50 rounded-2xl">
+               No available technicians found
+            </div>
+          )}
+        </div>
        </div>
 
        <div className="pt-6 flex gap-4">
@@ -1074,15 +1508,13 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
   const [bookingId, setBookingId] = useState("");
   
   useEffect(() => {
-    // Generate or fetch a unique booking ID display
     setBookingId(data.id?.slice(0, 8).toUpperCase() || "B" + Math.random().toString(36).substring(2, 10).toUpperCase());
   }, [data.id]);
 
   const addToCalendar = () => {
-    const title = `CarMechs: ${data.serviceType} Execution`;
+    const title = `Carmechs: ${data.serviceType} Deployment`;
     const datePart = data.appointmentDate.replace(/-/g, '');
     
-    // Convert 12h time to 24h
     const parseTime = (t: string) => {
       const [time, modifier] = t.split(' ');
       let [hours, minutes] = time.split(':');
@@ -1097,28 +1529,26 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
 
     const startInfo = parseTime(data.appointmentTime);
     const startTime = startInfo.str;
-    
-    // End time is start time + 2 hours
     const endH = (startInfo.h + 2) % 24;
     const endTime = endH.toString().padStart(2, '0') + startInfo.m.toString().padStart(2, '0') + '00';
     
     const details = `Vehicle: ${data.carDetails.make} ${data.carDetails.model}\nRegistration: ${data.carDetails.plate}\nService: ${data.serviceType}\nTechnician: ${data.mechanicName || 'To be assigned'}\nBooking ID: ${bookingId}`;
-    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${datePart}T${startTime}/${datePart}T${endTime}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(data.location)}`;
+    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${datePart}T${startTime}/${datePart}T${endTime}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(data.location || 'Your Location')}`;
     window.open(url, '_blank');
   };
 
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="text-center space-y-12 py-6"
+      className="text-center space-y-12 py-10"
     >
        <div className="space-y-6">
           <div className="relative mx-auto w-32 h-32">
             <motion.div 
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", damping: 12 }}
+              initial={{ scale: 0, rotate: -45 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", damping: 12, stiffness: 100 }}
               className="w-32 h-32 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl shadow-emerald-200 relative z-10"
             >
                <CheckCircle2 size={64} className="text-white" />
@@ -1126,19 +1556,27 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
             <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full animate-pulse" />
           </div>
           
-          <div>
-            <h2 className="text-5xl font-black text-ink uppercase italic tracking-tighter mb-2">Operation Confirmed</h2>
-            <div className="inline-flex items-center gap-3 bg-slate-900 text-white px-6 py-2 rounded-2xl">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50">Unit_ID</span>
-              <span className="text-sm font-mono font-black text-emerald-400">{bookingId}</span>
+          <div className="space-y-2">
+            <h2 className="text-5xl font-black text-ink uppercase italic tracking-tighter">Mission Success</h2>
+            <p className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.4em] animate-pulse">Tactical Deployment Authorized</p>
+            <div className="mt-6 inline-flex flex-col items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-3xl shadow-xl">
+               <div className="flex items-center gap-4">
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Unit_ID</span>
+                  <span className="text-lg font-mono font-black text-emerald-400 tracking-widest">{bookingId}</span>
+               </div>
             </div>
           </div>
        </div>
 
-       <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-          <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-xl space-y-6 text-left relative overflow-hidden">
+       <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto px-4">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-xl space-y-6 text-left relative overflow-hidden group hover:border-emerald-500/20 transition-all"
+          >
              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-               <Calendar size={14} /> Schedule Analysis
+               <Calendar size={14} /> Schedule analysis
              </div>
              <div className="space-y-4 relative z-10">
                 <div>
@@ -1148,64 +1586,88 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
                 <div>
                    <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Arrival Window</div>
                    <div className="text-xl font-black text-primary italic uppercase tracking-tight">
-                     {data.appointmentTime} - {(() => {
-                        const [time, mod] = data.appointmentTime.split(' ');
-                        const [h, m] = time.split(':');
-                        const date = new Date();
-                        date.setHours(mod === 'PM' && h !== '12' ? parseInt(h) + 12 : (mod === 'AM' && h === '12' ? 0 : parseInt(h)));
-                        date.setMinutes(parseInt(m) + 60);
-                        let nh = date.getHours();
-                        const nmod = nh >= 12 ? 'PM' : 'AM';
-                        nh = nh % 12 || 12;
-                        return `${nh}:${m} ${nmod}`;
-                     })()}
+                     {data.appointmentTime}
                    </div>
                 </div>
-                <div className="pt-4 border-t border-slate-100">
-                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Assigned Identity</div>
-                   <div className="text-sm font-black text-ink uppercase tracking-tight">{data.fullName}</div>
+             </div>
+             <Calendar size={120} className="absolute -right-12 -bottom-12 text-slate-100 opacity-20 rotate-12 group-hover:scale-110 transition-transform" strokeWidth={1} />
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-white shadow-xl space-y-6 text-left relative overflow-hidden group hover:bg-white transition-all"
+          >
+             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+               <Wrench size={14} /> Service Manifest
+             </div>
+             <div className="space-y-3 relative z-10">
+                {data.cart && data.cart.length > 0 ? (
+                  data.cart.map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center bg-white/50 p-3 rounded-xl border border-white/80 group-hover:bg-slate-50 transition-colors">
+                      <div className="text-[10px] font-black uppercase text-ink tracking-tight">{item.title}</div>
+                      <div className="text-[10px] font-bold text-primary">₹{item.price}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm font-black text-ink uppercase tracking-tight">{data.serviceType}</div>
+                )}
+                {data.discount > 0 && (
+                   <div className="flex justify-between items-center p-3 border-2 border-dashed border-emerald-100 rounded-xl">
+                      <span className="text-[9px] font-black uppercase text-emerald-500">Reward Protocol</span>
+                      <span className="text-sm font-black text-emerald-500">-₹{data.discount}</span>
+                   </div>
+                )}
+                <div className="pt-2 border-t border-slate-200 flex justify-between">
+                   <span className="text-[9px] font-black uppercase text-slate-400">Net Capital Output</span>
+                   <span className="text-xl font-black text-primary italic">₹{data.price}</span>
                 </div>
              </div>
-             <Calendar size={120} className="absolute -right-12 -bottom-12 text-slate-100 opacity-20 rotate-12" strokeWidth={1} />
-          </div>
+          </motion.div>
 
-          <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-white shadow-xl space-y-6 text-left relative overflow-hidden">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-xl space-y-6 text-left relative overflow-hidden group hover:border-primary/20 transition-all"
+          >
              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-               <Car size={14} /> Spec Sheet Data
+               <Car size={14} /> Unit Spec Sheet
              </div>
              <div className="space-y-4 relative z-10">
                 <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                      {data.carDetails.brandLogo ? <img src={data.carDetails.brandLogo} className="w-8 h-8 object-contain" /> : <Car size={20} />}
+                   <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
+                      <Car size={20} className="text-primary" />
                    </div>
                    <div>
-                      <div className="text-base font-black text-ink uppercase italic">{data.carDetails.make} {data.carDetails.model}</div>
-                      <div className="text-[9px] font-bold text-primary uppercase tracking-widest">{data.carDetails.fuel} • {data.carDetails.year}</div>
+                      <div className="text-base font-black text-ink uppercase italic leading-none">{data.carDetails.make} {data.carDetails.model}</div>
+                      <div className="text-[9px] font-bold text-primary uppercase tracking-widest mt-1">{data.carDetails.fuel} • {data.carDetails.plate}</div>
                    </div>
                 </div>
-                <div className="bg-slate-900/5 p-4 rounded-2xl border border-black/5">
-                   <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">License Identifier</div>
-                   <div className="text-lg font-black text-ink uppercase tracking-[0.1em]">{data.carDetails.plate}</div>
+                <div className="pt-4 border-t border-slate-50 italic text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
+                  <MapPin size={10} className="text-primary" />
+                  Deployment Hub: {data.city}
                 </div>
              </div>
-             <Fuel size={120} className="absolute -right-12 -bottom-12 text-slate-200 opacity-20 rotate-12" strokeWidth={1} />
-          </div>
+             <ShieldCheck size={120} className="absolute -right-12 -bottom-12 text-slate-100 opacity-20 rotate-12 group-hover:rotate-0 transition-transform" strokeWidth={1} />
+          </motion.div>
        </div>
 
-       <div className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto">
+       <div className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto px-4 h-20">
           <button 
             onClick={addToCalendar}
-            className="flex-1 py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-4 group"
+            className="flex-1 py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-4 group hover:scale-[1.02] active:scale-[0.98]"
           >
             <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> 
-            Add to Google Calendar
+            Sync Google Calendar
           </button>
           <button 
             onClick={onClose}
-            className="flex-1 py-5 rounded-2xl bg-white border-2 border-slate-100 text-ink text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-50 transition-all flex items-center justify-center gap-4"
+            className="flex-1 py-5 rounded-2xl bg-slate-900 text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-slate-800 transition-all flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-[0.98]"
           >
-            Exit Terminal
-            <X size={18} />
+            Mission Complete
+            <CheckCircle2 size={18} className="text-emerald-400" />
           </button>
        </div>
     </motion.div>
@@ -1693,44 +2155,80 @@ function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps &
              <p className="text-[8px] font-medium text-slate-400 uppercase tracking-widest mt-2">* Mechanic arrival window includes a 45-minute buffer for tactical deployment.</p>
           </div>
 
-          {!isExistingBooking && user && (
-            <div className="p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
+          {!isExistingBooking && user && (user.loyaltyPoints || 0) > 0 && (
+            <div className="p-6 bg-emerald-50 rounded-3xl border border-emerald-100 mb-4 animate-in fade-in slide-in-from-bottom-2">
                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                      <Gift className="text-emerald-500" size={18} />
-                     <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Loyalty Rewards</div>
+                     <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Loyalty Rewards Protocol</div>
                   </div>
-                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{user.loyaltyPoints || 0} Points Available</div>
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-emerald-100">
+                    {user.loyaltyPoints || 0} Credits Available
+                  </div>
                </div>
+               
                {data.pointsRedeemed > 0 ? (
-                 <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-emerald-200">
-                    <div className="text-[10px] font-black text-emerald-600 uppercase">Discount Applied: ₹{data.discount}</div>
+                 <motion.div 
+                   initial={{ opacity: 0, scale: 0.95 }}
+                   animate={{ opacity: 1, scale: 1 }}
+                   className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-emerald-500 shadow-lg shadow-emerald-500/10"
+                 >
+                    <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white">
+                          <Zap size={20} />
+                       </div>
+                       <div>
+                          <div className="text-[9px] font-black uppercase text-emerald-500 tracking-widest leading-none mb-1">Discount Synthesized</div>
+                          <div className="text-sm font-black text-ink uppercase tracking-tight">-₹{data.discount} applied to mission cost</div>
+                       </div>
+                    </div>
                     <button 
                       onClick={() => updateData({ ...data, pointsRedeemed: 0, discount: 0, price: data.price + data.discount })}
-                      className="text-[9px] font-black text-rose-500 uppercase hover:underline"
+                      className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center"
                     >
-                      Remove
+                      <X size={18} />
                     </button>
-                 </div>
+                 </motion.div>
                ) : (
-                 <button 
-                   disabled={!(user.loyaltyPoints > 0)}
-                   onClick={() => {
-                     const pointsToRedeem = Math.min(user.loyaltyPoints, Math.floor(data.price * 0.2)); // Max 20% discount
-                     if (pointsToRedeem > 0) {
-                        updateData({ 
-                          ...data, 
-                          pointsRedeemed: pointsToRedeem, 
-                          discount: pointsToRedeem, 
-                          price: data.price - pointsToRedeem 
-                        });
-                        toast.success(`Protocol Activated: ₹${pointsToRedeem} discount synthesized.`);
-                     }
-                   }}
-                   className="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
-                 >
-                   Redeem Points for Discount
-                 </button>
+                 <div className="space-y-4">
+                   <div className="flex gap-2">
+                     <input 
+                       type="number"
+                       max={user.loyaltyPoints}
+                       placeholder="Enter credits..."
+                       className="flex-1 bg-white border-2 border-emerald-100 rounded-2xl px-6 py-3 outline-none focus:border-emerald-500 transition-all font-black text-ink text-sm"
+                       id="loyaltyInput"
+                     />
+                     <button 
+                       onClick={() => {
+                         const input = document.getElementById('loyaltyInput') as HTMLInputElement;
+                         const val = parseInt(input?.value || "0");
+                         const maxAllowed = Math.floor(data.price * 0.3); // Max 30% discount
+                         const pointsToRedeem = Math.min(val, user.loyaltyPoints || 0, maxAllowed);
+                         
+                         if (pointsToRedeem > 0) {
+                            updateData({ 
+                              ...data, 
+                              pointsRedeemed: pointsToRedeem, 
+                              discount: pointsToRedeem, 
+                              price: data.price - pointsToRedeem 
+                            });
+                            toast.success(`Protocol Activated: ₹${pointsToRedeem} discount synthesized.`);
+                         } else if (val > user.loyaltyPoints!) {
+                            toast.error("Insufficient loyalty credits.");
+                         } else if (val > maxAllowed) {
+                            toast.warning(`Maximum discount limit reached: ₹${maxAllowed}`);
+                         }
+                       }}
+                       className="px-8 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all"
+                     >
+                       Authorize
+                     </button>
+                   </div>
+                   <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-[0.2em] italic ml-1">
+                     * Tactical Discount Limit: 30% of total capital cost. 1 Credit = ₹1.
+                   </p>
+                 </div>
                )}
             </div>
           )}
@@ -1832,12 +2330,12 @@ function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps &
                 <div className="space-y-6 mb-10">
                   <ReviewItem label="Service Class" value={data.serviceType} />
                   <ReviewItem label="Vehicle Unit" value={`${data.carDetails.make} ${data.carDetails.model} (${data.carDetails.fuel})`} />
-                  <ReviewItem label="Service Location" value={data.location} />
-                  <ReviewItem label="Coordinates" value={`${data.address}, ${data.city}`} />
+                  <ReviewItem label="Deployment Hub" value={data.city} />
+                  <ReviewItem label="Tactical Address" value={data.address} />
                   <ReviewItem label="Deployment Date" value={new Date(data.appointmentDate).toDateString()} />
-                  <ReviewItem label="Arrival Window" value={data.appointmentTime} />
-                  <ReviewItem label="Identity" value={data.fullName} />
-                  <ReviewItem label="Contract Value" value={`₹${data.price}`} isHighlight />
+                  <ReviewItem label="Arrival Window" value={getArrivalRange(data.appointmentTime)} />
+                  <ReviewItem label="Identity Node" value={data.fullName} />
+                  <ReviewItem label="Protocol Value" value={`₹${data.price}`} isHighlight />
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setShowReview(false)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-ink">Re-Check Specs</button>
@@ -1878,11 +2376,14 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [transactionId, setTransactionId] = useState("");
 
-  const handleSubmit = async () => {
+   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
        let tid = "";
        let payStatus = "pending";
+
+       // Identify Mock Mode
+       const isMockNeeded = paymentMethod !== 'cash' && (!process.env.RAZORPAY_KEY_ID && !config.razorpayKeyId);
 
        // Real Gateway Integration
        const payResponse = await initializePayment({
@@ -1903,7 +2404,7 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
        }
        
        tid = payResponse.id;
-       payStatus = "paid";
+       payStatus = paymentMethod === 'cash' ? "pending" : "paid";
        
        setTransactionId(tid);
 
@@ -1911,13 +2412,35 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
          ...data,
          carModel: `${data.carDetails.make} ${data.carDetails.model}`, // For Admin Dashboard compatibility
          userId: auth.currentUser?.uid || "anonymous",
-         status: paymentMethod === 'cash' ? "pending" : "confirmed",
+         status: "pending", // All new bookings start as pending until admin confirms
          paymentStatus: payStatus,
          paymentMethod,
          transactionId: tid,
+         pointsRedeemed: data.pointsRedeemed || 0,
+         discountAmount: data.discount || 0,
+         finalPrice: data.price,
          createdAt: serverTimestamp(),
          updatedAt: serverTimestamp()
        });
+
+       // Save Vehicle to Garage if requested
+       if (data.saveVehicle && auth.currentUser) {
+         try {
+           await addDoc(collection(db, "users", auth.currentUser.uid, "garage"), {
+             userId: auth.currentUser.uid,
+             make: data.carDetails.make,
+             model: data.carDetails.model,
+             year: data.carDetails.year,
+             plate: data.carDetails.plate,
+             fuel: data.carDetails.fuel,
+             engine: data.carDetails.engine || "",
+             createdAt: serverTimestamp()
+           });
+           toast.success("Vehicle registered in Tactical Garage.");
+         } catch (vErr) {
+           console.warn("Garage registration failed:", vErr);
+         }
+       }
 
        // Deduct points if redeemed
        if (data.pointsRedeemed > 0 && auth.currentUser) {
@@ -2004,7 +2527,15 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
              <ShieldCheck size={100} />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] font-black uppercase tracking-widest text-primary mb-6">Payment Summary</div>
+            <div className="flex justify-between items-center mb-6">
+              <div className="text-[10px] font-black uppercase tracking-widest text-primary">Payment Summary</div>
+              {(paymentMethod !== 'cash' && (!import.meta.env.VITE_RAZORPAY_KEY_ID && !config.razorpayKeyId)) && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-500 rounded-full">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                  <span className="text-[8px] font-black uppercase text-white tracking-widest">Mock Transmission Active</span>
+                </div>
+              )}
+            </div>
             <div className="flex justify-between items-end">
                <div>
                   <div className="text-2xl font-black uppercase italic tracking-tight">{data.serviceType}</div>
@@ -2018,39 +2549,45 @@ function PaymentStep({ onNext, onBack, data, updateData, onComplete }: StepProps
        </div>
 
        <div className="space-y-4">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Authorize Service Transaction</label>
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Secure Tactical Payment</label>
           <div className="grid gap-3">
              {[
-               { id: "upi_razorpay", name: "Razorpay (UPI / Card)", icon: <Zap size={18} />, color: "bg-primary" },
-               { id: "paytm", name: "Paytm Checkout", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/Paytm_Logo_%28standalone%29.png" alt="Paytm" className="w-8" />, color: "bg-white border-blue-500" },
-               { id: "phonepe", name: "PhonePe", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/PhonePe_Logo.png" alt="PhonePe" className="w-8" />, color: "bg-white border-purple-500" },
-               ...(config?.cashOnServiceEnabled ? [{ id: "cash", name: "Cash After Service", icon: <Phone size={18} />, color: "bg-amber-500" }] : [])
+               { id: "upi_razorpay", name: "Razorpay Secure", subtitle: "Cards, NetBanking, UPI", icon: <ShieldCheck size={20} />, color: "bg-primary" },
+               { id: "paytm", name: "Paytm Payments", subtitle: "Wallet & Postpaid", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/Paytm_Logo_%28standalone%29.png" alt="Paytm" className="w-10" />, color: "bg-[#00baf2]" },
+               { id: "phonepe", name: "PhonePe Gateway", subtitle: "Direct UPI & Wallet", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/PhonePe_Logo.png" alt="PhonePe" className="w-10" />, color: "bg-[#5f259f]" },
+               ...(config?.cashOnServiceEnabled !== false ? [{ id: "cash", name: "Cash on Deployment", subtitle: "Pay after service verification", icon: <Droplets size={20} />, color: "bg-emerald-500" }] : [])
              ].map(method => (
                 <button 
                    key={method.id}
                    onClick={() => setPaymentMethod(method.id)}
                    className={cn(
-                      "w-full flex items-center gap-4 p-5 rounded-3xl border-2 transition-all group",
-                      paymentMethod === method.id ? "border-primary bg-primary/5 shadow-xl shadow-primary/5" : "border-slate-50 bg-slate-50 hover:border-slate-100"
+                      "w-full flex items-center gap-5 p-6 rounded-[2.5rem] border-2 transition-all group relative overflow-hidden",
+                      paymentMethod === method.id ? "border-primary bg-primary-soft shadow-2xl shadow-primary/5" : "border-slate-50 bg-slate-50 hover:border-slate-100"
                    )}
                 >
+                   {paymentMethod === method.id && (
+                     <motion.div 
+                       layoutId="active-payment"
+                       className="absolute inset-0 bg-white/40 pointer-events-none"
+                     />
+                   )}
                    <div className={cn(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center transition-all",
-                      paymentMethod === method.id ? `${method.color} text-white` : "bg-white text-slate-300"
+                      "w-16 h-16 rounded-3xl flex items-center justify-center transition-all shadow-sm",
+                      paymentMethod === method.id ? `${method.color} text-white scale-110 rotate-3` : "bg-white text-slate-300"
                    )}>
                       {method.icon}
                    </div>
                    <div className="flex-1 text-left">
-                      <div className={cn("text-xs font-black uppercase tracking-tight", paymentMethod === method.id ? "text-ink" : "text-slate-400")}>{method.name}</div>
-                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                         {method.id === 'cash' ? "Pay after successful mission" : "Shielded digital gateway"}
+                      <div className={cn("text-sm font-black uppercase tracking-tight", paymentMethod === method.id ? "text-primary" : "text-slate-500")}>{method.name}</div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                         {method.subtitle}
                       </div>
                    </div>
                    <div className={cn(
-                      "w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center",
-                      paymentMethod === method.id ? "border-primary" : "border-slate-200"
+                      "w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center",
+                      paymentMethod === method.id ? "border-primary bg-white shadow-sm" : "border-slate-200"
                    )}>
-                      {paymentMethod === method.id && <div className="w-3 h-3 rounded-full bg-primary" />}
+                      {paymentMethod === method.id && <div className="w-4 h-4 rounded-full bg-primary animate-pulse" />}
                    </div>
                 </button>
              ))}

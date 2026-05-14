@@ -666,6 +666,7 @@ export default function AdminDashboard() {
     { id: "testimonials", name: "Testimonials", icon: Quote },
     { id: "referrals", name: "Referral System", icon: Gift },
     { id: "marketing", name: "Marketing CMS", icon: Megaphone },
+    { id: "feedback", name: "User Feedback", icon: MessageSquare },
     { id: "customers", name: "User Management", icon: Users },
     { id: "fleet", name: "Fleet Telemetry", icon: Activity },
     { id: "locations", name: "Location Control", icon: Globe },
@@ -851,6 +852,7 @@ export default function AdminDashboard() {
             { activeTab === "customers" && <UsersTab locations={locations} /> }
             { activeTab === "fleet" && <FleetControlTab bookings={bookings} technicians={mechanics} /> }
             { activeTab === "marketing" && <MarketingTab /> }
+            { activeTab === "feedback" && <FeedbackTab /> }
             { activeTab === "settings" && <SettingsTab user={user} config={config} setConfig={setConfig} /> }
           </div>
         </div>
@@ -1151,13 +1153,14 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>(["all"]);
+  const [selectedBookings, setSelectedBookings] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
   const filteredBookings = bookings.filter(b => {
-    const statusMatch = statusFilter === "all" || b.status === statusFilter;
+    const statusMatch = statusFilters.includes("all") || statusFilters.includes(b.status);
     const searchMatch = robustSearch(b, search, ["fullName", "phone", "carModel", "carDetails.make", "carDetails.model", "serviceType", "id", "city", "appointmentDate"]);
     return statusMatch && searchMatch;
   }).sort((a, b) => {
@@ -1168,8 +1171,45 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
     return dateA - dateB;
   });
   
-  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
-  const paginatedBookings = filteredBookings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const toggleStatusFilter = (status: string) => {
+    if (status === "all") {
+      setStatusFilters(["all"]);
+      return;
+    }
+    const newFilters = statusFilters.filter(f => f !== "all");
+    if (newFilters.includes(status)) {
+       const next = newFilters.filter(f => f !== status);
+       setStatusFilters(next.length === 0 ? ["all"] : next);
+    } else {
+       setStatusFilters([...newFilters, status]);
+    }
+  };
+
+  const handleBulkAction = async (action: string) => {
+    if (selectedBookings.length === 0) return;
+    
+    const confirm = window.confirm(`Apply "${action}" to ${selectedBookings.length} selected missions?`);
+    if (!confirm) return;
+
+    try {
+      if (action === "completed" || action === "confirmed") {
+        await Promise.all(selectedBookings.map(id => {
+          const booking = bookings.find(b => b.id === id);
+          return handleStatusUpdate(id, action, booking?.email, booking?.fullName, booking?.carModel, booking?.serviceType, booking?.appointmentDate, booking?.appointmentTime, booking?.userId, booking?.price);
+        }));
+      } else if (action === "remind") {
+        await Promise.all(selectedBookings.map(id => {
+          const booking = bookings.find(b => b.id === id);
+          if (booking) return sendReminder(booking);
+        }));
+      }
+      setSelectedBookings([]);
+      toast.success(`Bulk protocol executed: ${action.toUpperCase()}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Bulk process failure.");
+    }
+  };
 
   if (loading) return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -1304,8 +1344,11 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
     }
   };
 
+  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const paginatedBookings = filteredBookings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto relative pb-32">
       <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center bg-card-bg p-8 rounded-[2.5rem] border border-border-subtle shadow-2xl">
            <div className="flex items-center gap-5">
               <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-accent-red border border-white/5 shadow-inner relative">
@@ -1324,10 +1367,10 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                 {["all", "pending", "confirmed", "in-progress", "completed", "cancelled"].map(status => (
                   <button 
                     key={status}
-                    onClick={() => setStatusFilter(status)}
+                    onClick={() => toggleStatusFilter(status)}
                     className={cn(
                       "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                      statusFilter === status 
+                      statusFilters.includes(status)
                         ? (status === 'cancelled' ? "bg-rose-600 text-white shadow-xl shadow-rose-600/20 scale-105" : "bg-accent-red text-white shadow-xl shadow-accent-red/20 scale-105")
                         : "text-text-dim hover:text-white"
                     )}
@@ -1368,6 +1411,21 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
           <table className="w-full text-left">
             <thead>
               <tr className="bg-black/20 border-b border-white/5">
+                <th className="px-6 py-5 w-10 text-center">
+                   <input 
+                    type="checkbox"
+                    className="w-4 h-4 rounded-md border-white/10 bg-black/40 checked:bg-accent-red transition-all cursor-pointer"
+                    checked={paginatedBookings.length > 0 && paginatedBookings.every(b => selectedBookings.includes(b.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const newSelection = [...new Set([...selectedBookings, ...paginatedBookings.map(b => b.id)])];
+                        setSelectedBookings(newSelection);
+                      } else {
+                        setSelectedBookings(selectedBookings.filter(id => !paginatedBookings.map(b => b.id).includes(id)));
+                      }
+                    }}
+                   />
+                </th>
                 <th className="px-6 py-5 w-10"></th>
                 <th className="px-6 py-5">
                   <button 
@@ -1390,10 +1448,22 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                   <tr 
                     className={cn(
                       "hover:bg-white/5 transition-all cursor-pointer group",
-                      expandedId === booking.id && "bg-white/5"
+                      expandedId === booking.id && "bg-white/5",
+                      selectedBookings.includes(booking.id) && "bg-accent-red/5"
                     )}
                     onClick={() => setExpandedId(expandedId === booking.id ? null : booking.id)}
                   >
+                    <td className="px-6 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                       <input 
+                        type="checkbox"
+                        className="w-4 h-4 rounded-md border-white/10 bg-black/40 checked:bg-accent-red transition-all cursor-pointer"
+                        checked={selectedBookings.includes(booking.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedBookings([...selectedBookings, booking.id]);
+                          else setSelectedBookings(selectedBookings.filter(id => id !== booking.id));
+                        }}
+                       />
+                    </td>
                     <td className="px-6 py-5">
                       <ChevronRight 
                         size={16} 
@@ -1475,7 +1545,7 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                   
                   {expandedId === booking.id && (
                     <tr className="bg-black/40 shadow-inner">
-                      <td colSpan={6} className="px-10 py-10">
+                      <td colSpan={7} className="px-10 py-10">
                         <motion.div 
                           initial={{ opacity: 0, scale: 0.98 }}
                           animate={{ opacity: 1, scale: 1 }}
@@ -1723,6 +1793,49 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
           </div>
         )}
       </div>
+
+      {selectedBookings.length > 0 && (
+        <motion.div 
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 bg-neutral-900/90 border border-accent-red/30 p-4 rounded-3xl shadow-2xl shadow-accent-red/20 flex items-center gap-6 backdrop-blur-xl"
+        >
+           <div className="flex items-center gap-4 px-4 border-r border-white/5">
+              <div className="w-10 h-10 rounded-xl bg-accent-red flex items-center justify-center text-white font-black italic">
+                 {selectedBookings.length}
+              </div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-text-dim">Missions Selection Active</div>
+           </div>
+           
+           <div className="flex gap-2">
+              <button 
+                onClick={() => handleBulkAction('confirmed')}
+                className="px-6 py-3 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-lg shadow-emerald-600/10"
+              >
+                Accept Selection
+              </button>
+              <button 
+                onClick={() => handleBulkAction('completed')}
+                className="px-6 py-3 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-600/30 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-600/10"
+              >
+                Complete Mission
+              </button>
+              <button 
+                onClick={() => handleBulkAction('remind')}
+                className="px-6 py-3 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-600/30 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-lg shadow-indigo-600/10"
+              >
+                Tactical Reminder
+              </button>
+              <button 
+                onClick={() => setSelectedBookings([])}
+                className="p-3 rounded-xl bg-white/5 text-text-dim hover:text-rose-500 hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20"
+              >
+                <X size={18} />
+              </button>
+           </div>
+        </motion.div>
+      )}
     </div>
   );
 }
@@ -5037,6 +5150,124 @@ function ReferralsTab() {
   );
 }
 
+function FeedbackTab() {
+  const [feedback, setFeedback] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [ratingFilter, setRatingFilter] = useState("all");
+
+  useEffect(() => {
+    const q = query(collection(db, "feedback"), orderBy("createdAt", "desc"));
+    return onSnapshot(q, (snap) => {
+      setFeedback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (err) => {
+      console.error("Feedback error:", err);
+      setLoading(false);
+    });
+  }, []);
+
+  const filtered = feedback.filter(f => {
+    const searchMatch = robustSearch(f, search, ["userName", "serviceType", "comment", "bookingId"]);
+    const ratingMatch = ratingFilter === "all" || Math.floor(f.rating).toString() === ratingFilter;
+    return searchMatch && ratingMatch;
+  });
+
+  return (
+    <div className="space-y-8 max-w-7xl mx-auto pb-20">
+      <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center bg-card-bg p-10 rounded-[3rem] border border-border-subtle shadow-2xl overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-10 opacity-5">
+           <MessageSquare size={120} strokeWidth={1} />
+        </div>
+        <div className="relative z-10">
+          <h2 className="text-3xl font-black uppercase tracking-tighter italic text-white flex items-center gap-4 mb-2">
+            Intelligence <span className="text-secondary">Feedback</span>
+          </h2>
+          <p className="text-[11px] font-black uppercase tracking-widest text-text-dim max-w-md leading-relaxed">
+            Customer satisfaction telemetry and operational ratings
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-4 relative z-10">
+          <div className="flex items-center gap-3 bg-black/40 p-2 rounded-2xl border border-white/5">
+            {[5, 4, 3, 2, 1].map(r => (
+              <button 
+                key={r}
+                onClick={() => setRatingFilter(ratingFilter === r.toString() ? "all" : r.toString())}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                  ratingFilter === r.toString() ? "bg-yellow-500 text-black" : "text-text-dim hover:text-white"
+                )}
+              >
+                {r}★
+              </button>
+            ))}
+          </div>
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim group-focus-within:text-secondary" size={16} />
+            <input 
+              type="text"
+              placeholder="Search feedback..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-12 pr-6 py-4 bg-black/40 border border-white/5 rounded-2xl text-[11px] font-bold text-white focus:outline-none focus:border-secondary transition-all w-64 uppercase tracking-widest"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-[2.5rem]" />)
+        ) : filtered.map((f) => (
+          <motion.div 
+            key={f.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-card-bg p-8 rounded-[2.5rem] border border-border-subtle shadow-xl group hover:border-secondary/20 transition-all flex flex-col"
+          >
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center p-0.5 border border-white/5 overflow-hidden">
+                   <img src={f.userPhoto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${f.userName}`} alt="" />
+                </div>
+                <div>
+                  <div className="text-[13px] font-black uppercase text-white truncate max-w-[120px]">{f.userName}</div>
+                  <div className="text-[9px] font-mono text-text-dim uppercase tracking-widest">{f.bookingId?.slice(0, 8)}</div>
+                </div>
+              </div>
+              <div className="flex gap-0.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} size={14} className={cn(i < f.rating ? "text-yellow-500 fill-yellow-500" : "text-neutral-800")} />
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 space-y-4">
+              <div className="px-4 py-2 bg-secondary/10 border border-secondary/20 rounded-xl w-fit">
+                <span className="text-[9px] font-black uppercase text-secondary tracking-widest">{f.serviceType}</span>
+              </div>
+              <p className="text-[11px] font-bold text-text-muted leading-relaxed uppercase tracking-tight italic">
+                "{f.comment}"
+              </p>
+            </div>
+            <div className="mt-8 pt-6 border-t border-white/5 flex justify-between items-center">
+              <div className="text-[9px] font-black uppercase tracking-widest text-text-dim">
+                {f.createdAt?.toDate ? f.createdAt.toDate().toLocaleDateString() : 'N/A'}
+              </div>
+              <ChevronRight size={14} className="text-secondary/20 group-hover:text-secondary group-hover:translate-x-1 transition-all" />
+            </div>
+          </motion.div>
+        ))}
+        {filtered.length === 0 && !loading && (
+          <div className="col-span-full py-20 text-center bg-white/5 rounded-[3rem] border-2 border-dashed border-white/5">
+            <MessageSquare size={48} className="mx-auto text-neutral-800 mb-6" />
+            <div className="text-[11px] font-black uppercase text-neutral-600 tracking-[0.3em]">No feedback packets detected in this vector</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({ user, config, setConfig }: { user: any, config: any, setConfig: any }) {
   const [saving, setSaving] = useState(false);
 
@@ -7138,7 +7369,7 @@ function FleetControlTab({ bookings, technicians }: { bookings: any[], technicia
 }
 
 function MarketingTab() {
-  const [activeSubTab, setActiveSubTab] = useState<'testimonials' | 'blog'>('testimonials');
+  const [activeSubTab, setActiveSubTab] = useState<'testimonials' | 'blog' | 'campaigns'>('testimonials');
   
   return (
     <div className="space-y-10 max-w-6xl mx-auto pb-24">
@@ -7161,9 +7392,20 @@ function MarketingTab() {
           >
             Transmission Feed
           </button>
+          <button 
+            onClick={() => setActiveSubTab('campaigns')}
+            className={cn(
+              "px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all",
+              activeSubTab === 'campaigns' ? "bg-emerald-600 text-white shadow-xl" : "text-text-dim hover:text-white"
+            )}
+          >
+            Tactical Campaigns
+          </button>
        </div>
 
-       {activeSubTab === 'testimonials' ? <TestimonialsManager /> : <BlogManager />}
+       {activeSubTab === 'testimonials' && <TestimonialsManager />}
+       {activeSubTab === 'blog' && <BlogManager />}
+       {activeSubTab === 'campaigns' && <CampaignsManager />}
     </div>
   );
 }
@@ -7268,6 +7510,183 @@ function TestimonialsManager() {
                 </div>
              </div>
           ))}
+       </div>
+    </div>
+  );
+}
+
+import { sendPromotionalOffer } from "../lib/mail";
+
+function CampaignsManager() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [campaign, setCampaign] = useState({
+     title: "",
+     description: "",
+     coupon: "",
+     expiry: ""
+  });
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "users"), (snap) => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+  }, []);
+
+  const handleToggleUser = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedUsers.length === users.length) setSelectedUsers([]);
+    else setSelectedUsers(users.map(u => u.id));
+  };
+
+  const handleBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedUsers.length === 0) return toast.warn("No targets selected.");
+    
+    setSending(true);
+    let successCount = 0;
+    
+    try {
+      for (const userId of selectedUsers) {
+        const user = users.find(u => u.id === userId);
+        if (user && user.email) {
+          await sendPromotionalOffer({
+            email: user.email,
+            fullName: user.displayName || user.fullName || "Valued Member",
+            offerTitle: campaign.title,
+            offerDescription: campaign.description,
+            couponCode: campaign.coupon,
+            expiryDate: campaign.expiry
+          });
+          successCount++;
+        }
+      }
+      toast.success(`Broadcast complete: ${successCount} transmissions successfully deployed.`);
+      setCampaign({ title: "", description: "", coupon: "", expiry: "" });
+      setSelectedUsers([]);
+    } catch (err) {
+      console.error(err);
+      toast.error("Campaign deployment encountered critical errors.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-10">
+       <div className="grid lg:grid-cols-2 gap-10">
+          <div className="bg-card-bg p-10 rounded-[3rem] border border-border-subtle shadow-2xl relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:opacity-10 transition-opacity">
+                <Megaphone size={80} />
+             </div>
+             <h3 className="text-xl font-black text-white uppercase italic mb-8 border-b border-white/5 pb-6">Campaign Specs</h3>
+             
+             <form onSubmit={handleBroadcast} className="space-y-6 relative z-10">
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Directive Title</label>
+                   <input 
+                      required 
+                      value={campaign.title}
+                      onChange={e => setCampaign({...campaign, title: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-black text-white focus:border-emerald-500 outline-none" 
+                      placeholder="SUMMER_SERVICE_FIESTA"
+                   />
+                </div>
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Transmission Payload (Description)</label>
+                   <textarea 
+                      required 
+                      rows={4}
+                      value={campaign.description}
+                      onChange={e => setCampaign({...campaign, description: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-medium text-white focus:border-emerald-500 outline-none resize-none" 
+                      placeholder="Deploying 20% discount on all premium detailing maneuvers..."
+                   />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Access Coupon</label>
+                      <input 
+                         value={campaign.coupon}
+                         onChange={e => setCampaign({...campaign, coupon: e.target.value})}
+                         className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-black text-white focus:border-emerald-500 outline-none uppercase" 
+                         placeholder="MECHS20"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Expiry Epoch</label>
+                      <input 
+                         type="date"
+                         value={campaign.expiry}
+                         onChange={e => setCampaign({...campaign, expiry: e.target.value})}
+                         className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-sm font-black text-white focus:border-emerald-500 outline-none" 
+                      />
+                   </div>
+                </div>
+                
+                <button 
+                  type="submit"
+                  disabled={sending}
+                  className="w-full py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-base uppercase tracking-[0.4em] shadow-2xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-4 group"
+                >
+                   {sending ? <Loader2 className="animate-spin" size={24} /> : <Zap size={24} className="group-hover:rotate-12 transition-transform" />}
+                   {sending ? "TRANSMITTING..." : "BROADCAST CAMPAIGN"}
+                </button>
+             </form>
+          </div>
+
+          <div className="bg-card-bg rounded-[3rem] border border-border-subtle shadow-2xl flex flex-col overflow-hidden">
+             <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black/20">
+                <div>
+                   <h3 className="text-xl font-black text-white uppercase italic">Target Units</h3>
+                   <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest mt-1">{selectedUsers.length} units selected for mission</p>
+                </div>
+                <button 
+                   onClick={handleSelectAll}
+                   className="text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:text-white transition-all bg-emerald-400/10 px-4 py-2 rounded-xl border border-emerald-400/20"
+                >
+                   {selectedUsers.length === users.length ? "DESELECT_ALL" : "SELECT_ALL"}
+                </button>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar p-6 space-y-3">
+                {users.map(u => (
+                   <button 
+                      key={u.id}
+                      onClick={() => handleToggleUser(u.id)}
+                      className={cn(
+                        "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group",
+                        selectedUsers.includes(u.id) ? "bg-emerald-500/10 border-emerald-500/30" : "bg-white/5 border-white/5 hover:bg-white/10"
+                      )}
+                   >
+                      <div className={cn(
+                        "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
+                        selectedUsers.includes(u.id) ? "bg-emerald-500 border-emerald-500 text-white" : "border-white/10"
+                      )}>
+                         {selectedUsers.includes(u.id) && <CheckCircle2 size={14} strokeWidth={4} />}
+                      </div>
+                      <div className="flex items-center gap-4 flex-1">
+                         <div className="w-10 h-10 rounded-xl bg-white/5 p-0.5 overflow-hidden border border-white/5">
+                            <img src={u.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.id}`} alt="" className="w-full h-full object-cover rounded-lg" />
+                         </div>
+                         <div>
+                            <div className="font-black text-xs text-white uppercase italic truncate max-w-[150px]">{u.displayName || u.fullName || "Unknown Node"}</div>
+                            <div className="text-[9px] font-mono text-text-dim truncate max-w-[150px]">{u.email}</div>
+                         </div>
+                      </div>
+                      <div className="text-[9px] font-black uppercase bg-black/40 px-3 py-1 rounded-full text-text-dim border border-white/5">{u.role || 'user'}</div>
+                   </button>
+                ))}
+             </div>
+          </div>
        </div>
     </div>
   );

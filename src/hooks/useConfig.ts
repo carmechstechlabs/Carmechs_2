@@ -32,6 +32,7 @@ export interface UIConfig {
   footerLegalLinks: FooterLink[];
   logoUrl?: string;
   cashOnServiceEnabled: boolean;
+  razorpayKeyId?: string;
   fontFamily: string;
   baseFontSize: number;
   fontColor?: string;

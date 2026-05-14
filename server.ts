@@ -292,6 +292,87 @@ async function startServer() {
     res.json(result);
   });
 
+  // Notifications: Promotional Offer
+  app.post("/api/notify/promotion", async (req, res) => {
+    const { email, fullName, offerTitle, offerDescription, couponCode, expiryDate } = req.body;
+    
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #6366f1; border-radius: 20px; text-align: center;">
+        <h1 style="color: #6366f1; margin-bottom: 5px;">Exclusive Reward</h1>
+        <p style="text-transform: uppercase; font-weight: bold; color: #999; letter-spacing: 2px;">Specially for ${fullName}</p>
+        
+        <div style="background: #f5f3ff; padding: 30px; border-radius: 15px; margin: 25px 0; border: 2px dashed #c7d2fe;">
+          <h2 style="margin: 0 0 10px 0; font-size: 24px; color: #1e1b4b;">${offerTitle}</h2>
+          <p style="color: #4338ca; font-size: 16px; line-height: 1.6;">${offerDescription}</p>
+          
+          ${couponCode ? `
+            <div style="margin-top: 25px; padding: 15px; background: #fff; border-radius: 10px; display: inline-block; border: 1px solid #e0e7ff;">
+              <p style="margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; color: #6366f1; font-weight: 800;">Use Code</p>
+              <div style="font-size: 24px; font-weight: 900; letter-spacing: 3px; color: #1e1b4b;">${couponCode}</div>
+            </div>
+          ` : ''}
+          
+          <p style="margin-top: 15px; font-size: 11px; color: #94a3b8;">Valid until ${expiryDate || "further notice"}</p>
+        </div>
+        
+        <a href="${process.env.APP_URL || '#'}" style="display: inline-block; background: #6366f1; color: white; padding: 15px 40px; border-radius: 12px; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 14px;">Redeem Now</a>
+        
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">You received this as a CarMechs Premium Member</p>
+      </div>
+    `;
+
+    const result = await sendEmail({
+      to: email,
+      subject: `🎁 ${offerTitle} for you, ${fullName}!`,
+      html
+    });
+
+    res.json(result);
+  });
+
+  // Notifications: Admin Booking Alert
+  app.post("/api/notify/admin-booking-alert", async (req, res) => {
+    const { booking } = req.body;
+    const { fullName, phone, carModel, serviceType, appointmentDate, appointmentTime, city, id, price } = booking;
+    const sysConfig = await getSystemConfig() as any;
+    
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 2px solid #000; border-radius: 10px; background: #fff;">
+        <div style="background: #000; color: #fff; padding: 10px 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+          <strong style="text-transform: uppercase; letter-spacing: 2px;">System Alert</strong>
+          <span style="font-size: 10px; opacity: 0.7;">${new Date().toLocaleString()}</span>
+        </div>
+        
+        <h2 style="margin: 0 0 20px 0; font-size: 20px; text-transform: uppercase; border-bottom: 2px solid #eee; padding-bottom: 10px;">New Booking Deployment</h2>
+        
+        <div style="margin-bottom: 20px;">
+          <p style="margin: 5px 0;"><strong>ID:</strong> #${id.substring(0, 8).toUpperCase()}</p>
+          <p style="margin: 5px 0;"><strong>Client:</strong> ${fullName} (${phone})</p>
+          <p style="margin: 5px 0;"><strong>Vehicle:</strong> ${carModel}</p>
+          <p style="margin: 5px 0;"><strong>Service:</strong> ${serviceType}</p>
+          <p style="margin: 5px 0;"><strong>Value:</strong> ₹${price}</p>
+          <p style="margin: 5px 0;"><strong>Schedule:</strong> ${appointmentDate} @ ${appointmentTime}</p>
+          <p style="margin: 5px 0;"><strong>Location:</strong> ${city}</p>
+        </div>
+        
+        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px;">
+          <p style="margin: 0; font-size: 12px; color: #374151;">Action Required: Please login to Admin Dashboard to assign a technician and synchronize logistics.</p>
+        </div>
+        
+        <p style="font-size: 10px; color: #999; margin-top: 30px; text-transform: uppercase; text-align: center;">CarMechs Operational Telemetry</p>
+      </div>
+    `;
+
+    const result = await sendEmail({
+      to: process.env.ADMIN_EMAIL || sysConfig.supportEmail || "carmechstechlabs@gmail.com",
+      subject: `🚨 [NEW BOOKING] ${fullName} - ${city} (#${id.substring(0, 8)})`,
+      html
+    });
+
+    res.json(result);
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
   });

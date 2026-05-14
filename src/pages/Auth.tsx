@@ -198,7 +198,7 @@ export default function Auth() {
               <Car size={30} />
             </div>
             <h1 className="text-4xl font-black mb-6 leading-tight tracking-tighter">
-              CarMechs <br />
+              Carmechs <br />
               <span className="text-secondary opacity-40 italic">Future of Service</span>
             </h1>
             <p className="text-white/70 font-medium leading-relaxed max-w-sm">
@@ -389,6 +389,16 @@ export default function Auth() {
                   >
                     <Facebook size={16} fill="white" />
                     Facebook
+                  </button>
+                </div>
+
+                <div className="mt-10 pt-10 border-t-2 border-slate-50 flex justify-center">
+                  <button 
+                    onClick={() => navigate("/")}
+                    className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] hover:text-primary transition-all group"
+                  >
+                    <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                    Return to Launchpad
                   </button>
                 </div>
               </motion.div>

@@ -10,6 +10,7 @@ export interface UserProfile {
   referralCode?: string;
   referredBy?: string;
   bonusBalance?: number;
+  loyaltyPoints?: number;
   locationId?: string;
   profileCompleted?: boolean;
   address?: string;

@@ -30,7 +30,7 @@ import { cn } from '../lib/utils';
 
 export default function MechanicDashboard() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'bookings' | 'profile'>('bookings');
+  const [activeTab, setActiveTab] = useState<'bookings' | 'profile' | 'schedule'>('bookings');
   const [techProfile, setTechProfile] = useState<any>(null);
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +41,7 @@ export default function MechanicDashboard() {
     if (!user) return;
 
     // Fetch Technician Profile
-    const techQuery = query(collection(db, "technician"), where("userId", "==", user.uid));
+    const techQuery = query(collection(db, "technicians"), where("userId", "==", user.uid));
     const unsubTech = onSnapshot(techQuery, (snap) => {
       if (!snap.empty) {
         setTechProfile({ id: snap.docs[0].id, ...snap.docs[0].data() });
@@ -50,13 +50,6 @@ export default function MechanicDashboard() {
       }
     });
 
-    // Fetch Bookings for this Mechanic
-    const bookingsQuery = query(collection(db, "booking"), where("mechanicId", "==", user.uid));
-    // Wait, the technician ID is usually the document ID in 'technician' collection.
-    // But in AdminDashboard, it looks like it uses mechanicId.
-    // Let's check how admin assigns mechanic.
-    // AdminDashboard line 1244: handleSaveNotes assigns mechanicId
-    
     return () => {
       unsubTech();
     };
@@ -68,7 +61,7 @@ export default function MechanicDashboard() {
     
     // In CarMechs, bookings might use the tech document ID or the user ID.
     // Let's check common pattern.
-    const bookingsQuery = query(collection(db, "booking"), where("mechanicId", "==", techProfile.id));
+    const bookingsQuery = query(collection(db, "bookings"), where("mechanicId", "==", techProfile.id));
     const unsubBookings = onSnapshot(bookingsQuery, (snap) => {
       const bData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setBookings(bData.sort((a: any, b: any) => {
@@ -130,7 +123,7 @@ export default function MechanicDashboard() {
 
       {/* Sidebar Navigation */}
       <AnimatePresence>
-        {(sidebarOpen || true) && (
+        {(sidebarOpen || (typeof window !== 'undefined' && window.innerWidth >= 768)) && (
           <motion.div 
             initial={{ x: -300 }}
             animate={{ x: 0 }}
@@ -162,6 +155,12 @@ export default function MechanicDashboard() {
                 icon={Calendar}
                 label="Mission Log"
                 count={bookings.filter(b => b.status !== 'completed').length}
+              />
+              <NavButton 
+                active={activeTab === 'schedule'} 
+                onClick={() => { setActiveTab('schedule'); setSidebarOpen(false); }}
+                icon={Clock}
+                label="Tactical Schedule"
               />
               <NavButton 
                 active={activeTab === 'profile'} 
@@ -199,15 +198,21 @@ export default function MechanicDashboard() {
       {/* Main Content Area */}
       <main className="flex-1 p-6 md:p-12 overflow-y-auto">
          <div className="max-w-5xl mx-auto space-y-12">
-            {activeTab === 'bookings' ? (
+            {activeTab === 'bookings' && (
               <BookingsSection techId={techProfile.id} bookings={bookings} />
-            ) : (
+            )}
+            
+            {activeTab === 'schedule' && (
+               <ScheduleSection techProfile={techProfile} />
+            )}
+            
+            {activeTab === 'profile' && (
               <ProfileSection 
                 profile={techProfile} 
                 onSave={async (data) => {
                   setSaveLoading(true);
                   try {
-                    await updateDoc(doc(db, "technician", techProfile.id), {
+                    await updateDoc(doc(db, "technicians", techProfile.id), {
                       ...data,
                       updatedAt: serverTimestamp()
                     });
@@ -225,6 +230,167 @@ export default function MechanicDashboard() {
     </div>
   );
 }
+
+function ScheduleSection({ techProfile }: { techProfile: any }) {
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [unavailableSlots, setUnavailableSlots] = useState<string[]>(techProfile.unavailableSlots || []);
+  const [saving, setSaving] = useState(false);
+
+  const dates = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(offset => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d;
+  });
+
+  const generateTimes = () => {
+    const times = [];
+    for (let hour = 9; hour <= 18; hour++) {
+      for (let min of ["00", "30"]) {
+        if (hour === 18 && min === "30") break;
+        const h = hour > 12 ? hour - 12 : hour;
+        const ampm = hour >= 12 ? "PM" : "AM";
+        times.push(`${h.toString().padStart(2, '0')}:${min} ${ampm}`);
+      }
+    }
+    return times;
+  };
+
+  const times = generateTimes();
+
+  const toggleSlot = async (time: string) => {
+    const slotKey = `${selectedDate}|${time}`;
+    let newSlots;
+    if (unavailableSlots.includes(slotKey)) {
+      newSlots = unavailableSlots.filter(s => s !== slotKey);
+    } else {
+      newSlots = [...unavailableSlots, slotKey];
+    }
+    
+    setUnavailableSlots(newSlots);
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "technicians", techProfile.id), {
+        unavailableSlots: newSlots,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to sync availability:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-12 pb-20">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+           <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter mb-4">Tactical Schedule</h2>
+           <p className="text-xs text-text-dim uppercase font-black tracking-widest flex items-center gap-3">
+              <Clock size={14} className="text-accent-red" />
+              Manage unavailable time slots for deployment
+           </p>
+        </div>
+        {saving && (
+           <div className="flex items-center gap-2 px-4 py-2 bg-accent-red/10 border border-accent-red/20 rounded-xl text-[10px] font-black uppercase text-accent-red animate-pulse">
+              <Settings size={12} className="animate-spin" />
+              Syncing Hub...
+           </div>
+        )}
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        {/* Date Selector */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="text-[10px] font-black text-text-dim uppercase tracking-widest italic flex items-center gap-2 ml-1">
+             <Calendar size={14} className="text-accent-red" />
+             Select Mission Date
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-2 gap-3">
+            {dates.map((d, i) => {
+              const dateStr = d.toISOString().split('T')[0];
+              const isSelected = selectedDate === dateStr;
+              const unavailableCount = unavailableSlots.filter(s => s.startsWith(dateStr)).length;
+              
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelectedDate(dateStr)}
+                  className={cn(
+                    "p-6 rounded-[2.5rem] border-2 transition-all flex flex-col items-center justify-center relative group",
+                    isSelected 
+                      ? "border-accent-red bg-accent-red text-white shadow-2xl shadow-accent-red/20 scale-[1.05] z-10" 
+                      : "border-white/5 bg-neutral-900 hover:border-white/20"
+                  )}
+                >
+                  <div className={cn(
+                    "text-[9px] font-black uppercase tracking-tight mb-1",
+                    isSelected ? "text-white/60" : "text-text-dim"
+                  )}>
+                    {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                  </div>
+                  <div className="text-2xl font-black italic leading-none">{d.getDate()}</div>
+                  {unavailableCount > 0 && !isSelected && (
+                    <div className="absolute top-4 right-4 flex items-center gap-1">
+                       <span className="text-[8px] font-black text-accent-red">{unavailableCount}</span>
+                       <div className="w-1.5 h-1.5 rounded-full bg-accent-red animate-pulse" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Time Grid */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="text-[10px] font-black text-text-dim uppercase tracking-widest italic flex items-center gap-2 ml-1">
+             <Clock size={14} className="text-accent-red" />
+             Toggle Unavailable Slots for {new Date(selectedDate).toDateString()}
+          </div>
+          <div className="bg-neutral-900 border border-white/5 rounded-[3rem] p-10">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {times.map(t => {
+                const isUnavailable = unavailableSlots.includes(`${selectedDate}|${t}`);
+                return (
+                  <button
+                    key={t}
+                    onClick={() => toggleSlot(t)}
+                    disabled={saving}
+                    className={cn(
+                      "p-5 rounded-2xl border-2 transition-all text-xs font-black tracking-widest uppercase relative overflow-hidden flex flex-col items-center gap-2",
+                      isUnavailable 
+                        ? "border-rose-500 bg-rose-500/10 text-rose-500" 
+                        : "border-white/5 bg-black/40 text-text-dim hover:border-accent-red/40 hover:text-white"
+                    )}
+                  >
+                    {isUnavailable ? (
+                      <X size={14} className="mb-1" />
+                    ) : (
+                      <CheckCircle size={14} className="mb-1 opacity-20" />
+                    )}
+                    {t}
+                    <div className={cn(
+                      "text-[8px] font-black uppercase tracking-tighter opacity-60",
+                      isUnavailable ? "text-rose-400" : "text-emerald-500"
+                    )}>
+                      {isUnavailable ? "UNAVAILABLE" : "OPERATIONAL"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-10 p-6 bg-white/5 rounded-2xl border border-dashed border-white/10 italic text-center">
+               <p className="text-[10px] text-text-dim uppercase font-black tracking-[0.2em] leading-relaxed">
+                  Note: Marking a slot as unavailable will remove it from the public booking manifest in real-time. Use this for lunch breaks, training phases, or personal appointments.
+               </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function NavButton({ active, onClick, icon: Icon, label, count }: any) {
   return (
@@ -317,7 +483,7 @@ function BookingCard({ booking }: { booking: any }) {
   const updateStatus = async (newStatus: string) => {
     setUpdating(true);
     try {
-      await updateDoc(doc(db, "booking", booking.id), {
+      await updateDoc(doc(db, "bookings", booking.id), {
         status: newStatus,
         updatedAt: serverTimestamp()
       });
@@ -393,7 +559,7 @@ function BookingCard({ booking }: { booking: any }) {
                       <div>
                         <div className="text-[9px] font-black text-text-dim uppercase tracking-widest mb-0.5">Schedule Anchor</div>
                         <div className="text-xs font-black text-white uppercase">
-                          {new Date(booking.appointmentDate).toLocaleDateString()} // {booking.appointmentTime}
+                          {new Date(booking.appointmentDate).toLocaleDateString()} | {booking.appointmentTime}
                         </div>
                       </div>
                    </div>

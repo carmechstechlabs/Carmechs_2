@@ -26,9 +26,38 @@ export async function sendConfirmationEmail(
 }
 
 export async function sendNewBookingAlert(booking: any) {
-  // Logic for internal alerts could also go through backend if needed
-  console.log(`[MAIL SERVICE] Sending new booking alert to assist@carmechs.in...`);
-  return { success: true };
+  try {
+    const response = await fetch("/api/notify/admin-booking-alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ booking }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to relay admin booking alert:", error);
+    return { success: false, error };
+  }
+}
+
+export async function sendPromotionalOffer(offer: {
+  email: string;
+  fullName: string;
+  offerTitle: string;
+  offerDescription: string;
+  couponCode?: string;
+  expiryDate?: string;
+}) {
+  try {
+    const response = await fetch("/api/notify/promotion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(offer),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to relay promotional offer:", error);
+    return { success: false, error };
+  }
 }
 
 export async function sendContactSubmissionAlert(data: any) {

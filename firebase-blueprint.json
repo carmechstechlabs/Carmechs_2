@@ -208,12 +208,64 @@
           }
         }
       }
+    },
+    "vehicle": {
+      "title": "Saved Vehicle",
+      "description": "A vehicle configuration saved by a user for future bookings.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "make": { "type": "string" },
+        "model": { "type": "string" },
+        "fuel": { "type": "string" },
+        "year": { "type": "string" },
+        "engine": { "type": "string" },
+        "plate": { "type": "string" },
+        "nickName": { "type": "string", "description": "Optional user-friendly name for the car" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "make", "model", "fuel", "createdAt"]
+    },
+    "location": {
+      "title": "Tactical Hub",
+      "description": "A service location or workshop branch.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "region": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "address", "isActive"]
+    },
+    "feedback": {
+      "title": "Mission Feedback",
+      "description": "Customer feedback and ratings for bookings.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "rating": { "type": "number", "minimum": 1, "maximum": 5 },
+        "comment": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "rating", "createdAt"]
     }
   },
   "firestore": {
     "/bookings/{bookingId}": {
       "schema": "booking",
       "description": "Store for all car service bookings."
+    },
+    "/locations/{locationId}": {
+      "schema": "location",
+      "description": "Service hubs and workshop locations."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "feedback",
+      "description": "Customer feedback and reviews."
     },
     "/carBrands/{brandName}": {
       "schema": "carBrand",
@@ -230,6 +282,10 @@
     "/users/{userId}": {
       "schema": "user",
       "description": "Customer profiles."
+    },
+    "/users/{userId}/garage/{vehicleId}": {
+      "schema": "vehicle",
+      "description": "Saved vehicle configurations for a specific user."
     },
     "/tickets/{ticketId}": {
       "schema": "ticket",
