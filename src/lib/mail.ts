@@ -74,6 +74,29 @@ export async function sendContactSubmissionAlert(data: any) {
   }
 }
 
+export async function sendStatusUpdateEmail(data: {
+  email: string;
+  fullName: string;
+  bookingId: string;
+  status: string;
+  carModel?: string;
+  serviceType?: string;
+  date?: string;
+  time?: string;
+}) {
+  try {
+    const response = await fetch("/api/notify/booking-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to relay status update email:", error);
+    return { success: false, error };
+  }
+}
+
 export async function sendInquiryConfirmation(email: string, name: string) {
   console.log(`[MAIL SERVICE] Sending inquiry confirmation to ${email}...`);
   console.log(`Subject: Inquiry Received - CarMechs`);
@@ -92,6 +115,20 @@ export async function sendTaskNotification(email: string, task: any) {
     return await response.json();
   } catch (error) {
     console.error("Failed to relay task alert:", error);
+    return { success: false, error };
+  }
+}
+
+export async function sendBookingReminder(email: string, fullName: string, booking: any) {
+  try {
+    const response = await fetch("/api/notify/booking-reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, fullName, booking }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to relay booking reminder:", error);
     return { success: false, error };
   }
 }

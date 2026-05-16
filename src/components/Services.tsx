@@ -155,12 +155,14 @@ export default function Services() {
   const [loading, setLoading] = useState(true);
   const [activeCategories, setActiveCategories] = useState<string[]>(["All"]);
   const [activeFeatures, setActiveFeatures] = useState<string[]>([]);
-  const [selectedCar, setSelectedCar] = useState({ make: "", model: "", fuel: "" });
   const [showCarPicker, setShowCarPicker] = useState(false);
   const [sortBy, setSortBy] = useState<"none" | "price-asc" | "price-desc" | "title-asc" | "title-desc">("none");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const { addToCart } = useCart();
+  const { addToCart, selectedVehicle, setSelectedVehicle } = useCart();
+
+  const selectedCar = selectedVehicle;
+  const setSelectedCar = setSelectedVehicle;
 
   useEffect(() => {
     const q = query(collection(db, "services"), where("isActive", "==", true));

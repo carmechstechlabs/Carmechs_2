@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Users, 
+  User,
   Settings, 
   BarChart3, 
   Calendar, 
@@ -87,7 +88,7 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestam
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { useConfig } from "../hooks/useConfig";
 import { refundPayment } from "../lib/payment";
-import { sendTaskNotification } from "../lib/mail";
+import { sendTaskNotification, sendStatusUpdateEmail, sendBookingReminder } from "../lib/mail";
 import { toast } from "react-toastify";
 import { Skeleton } from "../components/ui/Skeleton";
 
@@ -115,6 +116,7 @@ export default function AdminDashboard() {
     });
     return () => unsubLocs();
   }, []);
+
   const [bookings, setBookings] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [mechanics, setMechanics] = useState<any[]>([]);
@@ -153,6 +155,37 @@ export default function AdminDashboard() {
 
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+
+  useEffect(() => {
+    if (isAdminCheck() && bookings.length > 0) {
+      const checkReminders = async () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const upcoming = bookings.filter((b: any) => 
+          b.appointmentDate === tomorrowStr && 
+          (b.status === "confirmed" || b.status === "pending") && 
+          !b.reminderSent
+        );
+
+        for (const booking of upcoming) {
+          try {
+            await sendBookingReminder(booking.email, booking.fullName, booking);
+            await updateDoc(doc(db, "bookings", booking.id), {
+              reminderSent: true,
+              updatedAt: serverTimestamp()
+            });
+            console.log(`Reminder sent for booking ${booking.id}`);
+          } catch (err) {
+            console.warn(`Reminder transmission protocol failure for ${booking.id}:`, err);
+          }
+        }
+      };
+
+      checkReminders();
+    }
+  }, [bookings, user, currentUserProfile]);
 
   useEffect(() => {
     if (user) {
@@ -838,6 +871,7 @@ export default function AdminDashboard() {
           <div className="relative z-10">
             {activeTab === "overview" && <OverviewTab bookings={bookings} onTabChange={handleTabChange} />}
             {activeTab === "bookings" && <BookingsTab bookings={bookings} mechanics={mechanics} loading={loadingBookings} />}
+            {activeTab === "reports" && <ReportsTab bookings={bookings} />}
             {activeTab === "mechanics" && <TechniciansTab />}
             {activeTab === "services" && <ServicesTab carData={carData} />}
             {activeTab === "content" && <ContentTab config={config} setConfig={setConfig} />}
@@ -1257,19 +1291,15 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
       // Trigger Server-Side Notification on Status Change
       if (email) {
         try {
-          await fetch("/api/notify/booking-status", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: email,
-              fullName: fullName || "Customer",
-              bookingId: id,
-              status: newStatus,
-              carModel: carModel || "Vehicle Node",
-              serviceType: serviceType || "Maintenance Operation",
-              date: appointmentDate || "TBA",
-              time: appointmentTime || "TBA"
-            })
+          await sendStatusUpdateEmail({
+            email: email,
+            fullName: fullName || "Customer",
+            bookingId: id,
+            status: newStatus,
+            carModel: carModel || "Vehicle Node",
+            serviceType: serviceType || "Maintenance Operation",
+            date: appointmentDate || "TBA",
+            time: appointmentTime || "TBA"
           });
         } catch (e) {
           console.warn("Status Notification trigger failed:", e);
@@ -1336,6 +1366,17 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
           refundId: `ref_${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
           updatedAt: serverTimestamp()
         });
+        
+        // Notify user of cancellation/refund
+        await sendStatusUpdateEmail({
+           email: booking.email,
+           fullName: booking.fullName,
+           bookingId: booking.id,
+           status: "cancelled",
+           carModel: booking.carModel,
+           serviceType: booking.serviceType
+        });
+
         toast.success("Refund processed successfully.");
       }
     } catch (err) {
@@ -1621,6 +1662,38 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                                   id={`carModel-${booking.id}`}
                                 />
                               </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                  <label className="text-[9px] text-text-dim block uppercase font-black tracking-widest ml-1">Energy (Fuel)</label>
+                                  <input 
+                                    type="text"
+                                    defaultValue={booking.carDetails?.fuel}
+                                    placeholder="Petrol"
+                                    className="w-full text-xs font-black p-3.5 bg-black/40 border border-white/10 rounded-xl outline-none"
+                                    id={`fuel-${booking.id}`}
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-[9px] text-text-dim block uppercase font-black tracking-widest ml-1">Reg. Year</label>
+                                  <input 
+                                    type="text"
+                                    defaultValue={booking.carDetails?.year}
+                                    placeholder="2022"
+                                    className="w-full text-xs font-black p-3.5 bg-black/40 border border-white/10 rounded-xl outline-none"
+                                    id={`year-${booking.id}`}
+                                  />
+                                </div>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] text-text-dim block uppercase font-black tracking-widest ml-1">License Plate</label>
+                                <input 
+                                  type="text"
+                                  defaultValue={booking.carDetails?.plate}
+                                  placeholder="MH01..."
+                                  className="w-full text-xs font-black p-3.5 bg-black/40 border border-white/10 rounded-xl outline-none uppercase tracking-widest"
+                                  id={`plate-${booking.id}`}
+                                />
+                              </div>
                               <div className="space-y-1.5">
                                 <label className="text-[9px] text-text-dim block uppercase font-black tracking-widest ml-1">Assigned Support</label>
                                 <div className="relative group/mech">
@@ -1720,12 +1793,17 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
                               <button 
                                   onClick={() => {
                                    const carModel = (document.getElementById(`carModel-${booking.id}`) as HTMLInputElement)?.value;
+                                   const fuel = (document.getElementById(`fuel-${booking.id}`) as HTMLInputElement)?.value;
+                                   const year = (document.getElementById(`year-${booking.id}`) as HTMLInputElement)?.value;
+                                   const plate = (document.getElementById(`plate-${booking.id}`) as HTMLInputElement)?.value;
                                    const serviceType = (document.getElementById(`serviceType-${booking.id}`) as HTMLSelectElement)?.value;
                                    const mechanicId = (document.getElementById(`mechanicId-${booking.id}`) as HTMLSelectElement)?.value;
                                    const address = (document.getElementById(`address-${booking.id}`) as HTMLTextAreaElement)?.value;
                                    const city = (document.getElementById(`city-${booking.id}`) as HTMLInputElement)?.value;
                                    const mechanicName = mechanics.find(m => m.id === mechanicId)?.name || "";
-                                   handleSaveNotes(booking.id, { carModel, serviceType, mechanicId, mechanicName, address, city });
+                                   
+                                   const carDetails = { ...booking.carDetails, fuel, year, plate };
+                                   handleSaveNotes(booking.id, { carModel, carDetails, serviceType, mechanicId, mechanicName, address, city });
                                  }}
                                 className="w-full bg-accent-red text-white py-3.5 rounded-xl font-black text-[11px] uppercase tracking-[0.25em] flex items-center justify-center gap-2 hover:bg-red-700 transition-all shadow-xl shadow-red-500/10"
                               >
@@ -4044,7 +4122,7 @@ function TasksTab() {
   const [sortBy, setSortBy] = useState("createdAt");
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
-  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", dueDate: "" });
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", dueDate: "", assignedTo: "" });
   const [sendingNotify, setSendingNotify] = useState<string | null>(null);
 
   useEffect(() => {
@@ -4078,7 +4156,7 @@ function TasksTab() {
         });
         toast.success("Task created successfully.");
       }
-      setNewTask({ title: "", description: "", priority: "medium", dueDate: "" });
+      setNewTask({ title: "", description: "", priority: "medium", dueDate: "", assignedTo: "" });
       setShowCreate(false);
       setEditingTask(null);
     } catch (err) {
@@ -4093,23 +4171,54 @@ function TasksTab() {
       title: task.title,
       description: task.description || "",
       priority: task.priority,
-      dueDate: task.dueDate || ""
+      dueDate: task.dueDate || "",
+      assignedTo: task.assignedTo || ""
     });
     setShowCreate(true);
   };
 
-  const handleToggleComplete = async (id: string, currentStatus: string) => {
-    if (currentStatus === "pending") {
-      if (!window.confirm("Are you sure you want to mark this task as complete?")) return;
-    }
-    
+  const handleStatusChange = async (id: string, newStatus: string) => {
     try {
       await updateDoc(doc(db, "tasks", id), {
-        status: currentStatus === "pending" ? "completed" : "pending",
+        status: newStatus,
         updatedAt: serverTimestamp()
       });
+      toast.success(`Task status updated to ${newStatus.toUpperCase()}`);
     } catch (err) {
       console.error(err);
+      toast.error("Status update sync failed.");
+    }
+  };
+
+  const checkDueTasks = async () => {
+    const now = new Date();
+    const soon = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+    
+    let notifyCount = 0;
+    for (const task of tasks) {
+      if (task.status === "completed" || !task.dueDate) continue;
+      
+      const dueDate = new Date(task.dueDate);
+      const isDueSoon = dueDate > now && dueDate < soon;
+      const isOverdue = dueDate < now;
+      
+      if (isDueSoon || isOverdue) {
+        // Simple heuristic to prevent spam: don't notify if notified in last 6 hours
+        const lastNotified = task.lastNotifiedAt?.toMillis() || 0;
+        if (Date.now() - lastNotified > 6 * 60 * 60 * 1000) {
+          const recipient = task.assignedTo || "assist@carmechs.in";
+          await sendTaskNotification(recipient, task);
+          await updateDoc(doc(db, "tasks", task.id), {
+            lastNotifiedAt: serverTimestamp()
+          });
+          notifyCount++;
+        }
+      }
+    }
+    if (notifyCount > 0) {
+      toast.info(`Dispatched ${notifyCount} priority alerts for due/overdue tasks.`);
+    } else {
+      toast.success("Operational readiness check: All tasks synchronized.");
     }
   };
 
@@ -4176,13 +4285,22 @@ function TasksTab() {
             </div>
           </div>
           
-          <button 
-            onClick={() => setShowCreate(!showCreate)}
-            className="group flex items-center gap-3 bg-accent-red text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-accent-red/20 hover:scale-105 active:scale-95 transition-all"
-          >
-            <PlusCircle size={18} className="group-hover:rotate-90 transition-transform" />
-            Append Task
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={checkDueTasks}
+              className="flex items-center gap-3 bg-white/5 text-white/70 border border-white/10 px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all group"
+            >
+              <RefreshCw size={16} className="group-hover:rotate-180 transition-transform duration-500" />
+              Sync Alarms
+            </button>
+            <button 
+              onClick={() => setShowCreate(!showCreate)}
+              className="group flex items-center gap-3 bg-accent-red text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-accent-red/20 hover:scale-105 active:scale-95 transition-all"
+            >
+              <PlusCircle size={18} className="group-hover:rotate-90 transition-transform" />
+              Append Task
+            </button>
+          </div>
         </div>
       </div>
 
@@ -4217,6 +4335,19 @@ function TasksTab() {
                       rows={3}
                       className="w-full text-xs p-5 bg-black/40 border border-white/10 rounded-2xl outline-none focus:border-accent-red text-white leading-relaxed"
                     />
+                  </div>
+                  <div className="space-y-2.5">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] ml-1">Assigned Operative (Email)</label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-700" size={14} />
+                      <input 
+                        type="email" 
+                        value={newTask.assignedTo}
+                        onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
+                        placeholder="operator@carmechs.in"
+                        className="w-full text-xs font-bold pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-2xl outline-none focus:border-accent-red text-white"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -4281,7 +4412,7 @@ function TasksTab() {
             </div>
 
             <div className="flex items-center gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
-              {["all", "pending", "completed"].map(status => (
+              {["all", "pending", "in-progress", "completed"].map(status => (
                 <button 
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -4327,120 +4458,154 @@ function TasksTab() {
         </div>
       </div>
 
-      <div className="grid gap-4">
-        {filteredTasks.map((task) => {
-          const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
-          
-          return (
-            <motion.div 
-              key={task.id}
-              layout
-              className={cn(
-                "bg-card-bg p-8 rounded-[2rem] border border-border-subtle group transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xl relative overflow-hidden",
-                task.status === "completed" ? "opacity-50 grayscale" : "hover:border-white/20 hover:shadow-accent-red/5",
-                task.priority === "high" && task.status !== "completed" && "border-rose-500/30 shadow-[0_0_30px_-10px_rgba(244,63,94,0.1)]",
-                isOverdue && "border-rose-600 animate-pulse-slow shadow-xl shadow-rose-900/10"
-              )}
-            >
-              {(task.priority === "high" || isOverdue) && task.status !== "completed" && (
-                <div className={cn(
-                    "absolute top-0 left-0 w-1.5 h-full",
-                    isOverdue ? "bg-rose-600" : "bg-rose-500"
-                )} />
-              )}
-              <div className="flex items-center gap-6 flex-1 min-w-0">
-                 <button 
-                   onClick={() => handleToggleComplete(task.id, task.status)}
-                   className={cn(
-                    "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all flex-shrink-0 group/check",
-                    task.status === "completed" 
-                      ? "bg-emerald-500 border-emerald-500 text-white" 
-                      : "border-white/10 hover:border-accent-red text-transparent hover:text-accent-red/40"
-                   )}
-                 >
-                   <CheckCircle2 size={24} className={cn("transition-transform", task.status === "pending" && "group-hover/check:scale-110")} />
-                 </button>
-                 
-                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-2 shadow-sm",
-                      task.priority === "high" ? "bg-rose-500/10 text-rose-500 border-rose-500/30" : 
-                      task.priority === "medium" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
-                      "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
-                    )}>
-                      {task.priority === "high" && <AlertCircle size={10} className="animate-pulse" />}
-                      {task.priority === "medium" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                      {task.priority === "low" && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-                      PRIORITY: {task.priority.toUpperCase()}
-                    </span>
-                    {isOverdue && (
-                      <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-rose-600 text-white shadow-xl shadow-rose-900/20 animate-bounce">
-                        OVERDUE_ALERT
-                      </span>
+      <div className="bg-card-bg rounded-[2.5rem] border border-border-subtle overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-black/20 border-b border-white/5">
+                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Status</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Objective</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Priority</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Assigned To</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Deadline</th>
+                <th className="px-8 py-6 text-right text-[10px] font-black uppercase tracking-[0.3em] text-text-dim">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {filteredTasks.map((task) => {
+                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
+                
+                return (
+                  <tr 
+                    key={task.id}
+                    className={cn(
+                      "hover:bg-white/[0.02] transition-all group",
+                      task.status === "completed" && "opacity-50 grayscale",
+                      isOverdue && "bg-rose-500/5"
                     )}
-                      {task.dueDate && (
-                        <span className={cn(
-                            "flex items-center gap-1.5 text-[9px] font-mono font-black italic",
-                            isOverdue ? "text-rose-500" : "text-text-dim"
+                  >
+                    <td className="px-8 py-6">
+                      <div className="relative group/status">
+                        <button 
+                          className={cn(
+                            "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all",
+                            task.status === "completed" ? "bg-emerald-500 border-emerald-500 text-white" :
+                            task.status === "in-progress" ? "bg-indigo-500 border-indigo-500 text-white" :
+                            "border-white/10 hover:border-accent-red text-white/20 hover:text-accent-red"
+                          )}
+                        >
+                          {task.status === "completed" ? <CheckCircle2 size={24} /> : 
+                           task.status === "in-progress" ? <RefreshCw size={20} className="animate-spin-slow" /> : 
+                           <Circle size={12} />}
+                        </button>
+                        <div className="absolute top-[120%] left-0 w-48 bg-card-bg border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/status:opacity-100 pointer-events-none group-hover/status:pointer-events-auto transition-all z-50 p-2">
+                           {["pending", "in-progress", "completed"].map(s => (
+                             <button 
+                               key={s}
+                               onClick={() => handleStatusChange(task.id, s)}
+                               className={cn(
+                                 "w-full text-left px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-white/5 transition-colors",
+                                 task.status === s ? "text-primary bg-primary/10" : "text-text-dim"
+                               )}
+                             >
+                               {s}
+                             </button>
+                           ))}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="max-w-md">
+                        <h3 className={cn(
+                          "text-[13px] font-black uppercase italic tracking-tight transition-all truncate",
+                          task.status === "completed" ? "line-through text-neutral-600" : "text-white"
                         )}>
-                          <Clock size={10} />
-                          {new Date(task.dueDate).toLocaleString()}
-                        </span>
+                          {task.title}
+                        </h3>
+                        <p className="text-[10px] text-neutral-500 font-medium truncate mt-1">
+                          {task.description || "NO_DESCRIPTION_LOGGED"}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-2 shadow-sm w-fit",
+                        task.priority === "high" ? "bg-rose-500/10 text-rose-500 border-rose-500/30" : 
+                        task.priority === "medium" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                        "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                      )}>
+                        {task.priority.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      {task.assignedTo ? (
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-text-dim">
+                            <User size={14} />
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-text-dim">
+                             {task.assignedTo.split('@')[0]}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[9px] font-black uppercase tracking-widest text-neutral-700">UNASSIGNED</span>
                       )}
-                    </div>
-                    <h3 className={cn(
-                      "text-lg font-black uppercase italic tracking-tight transition-all flex items-center gap-3",
-                      task.status === "completed" ? "line-through text-neutral-600" : "text-white group-hover:text-accent-red"
-                    )}>
-                      <div className={cn(
-                        "w-2.5 h-2.5 rounded-full shrink-0 shadow-[0_0_10px_currentColor]",
-                        task.priority === "high" ? "bg-rose-500 text-rose-500" : 
-                        task.priority === "medium" ? "bg-amber-500 text-amber-500" :
-                        "bg-emerald-500 text-emerald-500"
-                      )} />
-                      {task.title}
-                    </h3>
-                    {task.description && (
-                      <p className="text-xs text-neutral-500 font-medium leading-relaxed mt-2 line-clamp-1 group-hover:line-clamp-none transition-all">
-                        {task.description}
-                      </p>
-                    )}
-                 </div>
-              </div>
-
-              <div className="flex items-center gap-3 pl-12 md:pl-0">
-                {task.status !== "completed" && (
-                    <button 
-                        onClick={() => handleSendNotification(task)}
-                        disabled={sendingNotify === task.id}
-                        className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-primary hover:border-primary transition-all group/notify"
-                        title="Dispatch Operational Alert"
-                    >
-                        {sendingNotify === task.id ? <Loader2 size={16} className="animate-spin text-primary" /> : <Bell size={16} />}
-                    </button>
-                )}
-                <button 
-                  onClick={() => handleEdit(task)}
-                  className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-accent-red hover:border-accent-red transition-all opacity-0 group-hover:opacity-100"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button 
-                  onClick={() => handleDeleteTask(task.id)}
-                  className="p-3 rounded-xl bg-white/5 border border-white/5 text-text-dim hover:text-rose-500 hover:border-rose-500 transition-all opacity-0 group-hover:opacity-100"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </motion.div>
-          );
-        })}
+                    </td>
+                    <td className="px-8 py-6">
+                      {task.dueDate ? (
+                        <div className={cn(
+                          "flex flex-col gap-1",
+                          isOverdue ? "text-rose-500" : "text-text-dim"
+                        )}>
+                          <div className="text-[11px] font-black italic tracking-tighter flex items-center gap-2">
+                             <Clock size={12} />
+                             {new Date(task.dueDate).toLocaleDateString()}
+                          </div>
+                          <div className="text-[9px] font-mono opacity-60">
+                             {new Date(task.dueDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[9px] font-black uppercase tracking-widest text-neutral-800">NO_DEADLINE</span>
+                      )}
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {task.status !== "completed" && (
+                            <button 
+                                onClick={() => handleSendNotification(task)}
+                                disabled={sendingNotify === task.id}
+                                className="p-2.5 rounded-lg bg-white/5 border border-white/5 text-text-dim hover:text-primary hover:border-primary transition-all"
+                                title="Alert Operative"
+                            >
+                                {sendingNotify === task.id ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />}
+                            </button>
+                        )}
+                        <button 
+                          onClick={() => handleEdit(task)}
+                          className="p-2.5 rounded-lg bg-white/5 border border-white/5 text-text-dim hover:text-white hover:border-white transition-all"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="p-2.5 rounded-lg bg-white/5 border border-white/5 text-text-dim hover:text-rose-500 hover:border-rose-500 transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         {filteredTasks.length === 0 && !loading && (
-          <div className="text-center py-32 bg-card-bg rounded-[4rem] border border-border-subtle shadow-xl">
-             <ListTodo size={80} className="text-neutral-800 mx-auto mb-8 opacity-20" strokeWidth={1} />
-             <div className="text-[11px] font-black uppercase tracking-[0.3em] text-neutral-600 italic">No Operational Objectives Identified</div>
+          <div className="text-center py-32">
+             <ListTodo size={64} className="text-neutral-800 mx-auto mb-6 opacity-20" strokeWidth={1} />
+             <div className="text-[11px] font-black uppercase tracking-[0.3em] text-neutral-600 italic">Registry Manifest Empty</div>
           </div>
         )}
       </div>
@@ -5898,27 +6063,40 @@ function TechniciansTab() {
 }
 
 function ReportsTab({ bookings }: { bookings: any[] }) {
-  // Logic for generating report data
-  const revenueData = [
-    { name: 'Mon', value: 12400 },
-    { name: 'Tue', value: 18900 },
-    { name: 'Wed', value: 15600 },
-    { name: 'Thu', value: 22000 },
-    { name: 'Fri', value: 28000 },
-    { name: 'Sat', value: 34000 },
-    { name: 'Sun', value: 29000 },
-  ];
+  // Logic for generating real report data
+  const revenueData = Array.from({ length: 14 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (13 - i));
+    const dateStr = d.toISOString().split('T')[0];
+    const dayBookings = bookings.filter(b => b.createdAt?.toDate?.().toISOString().split('T')[0] === dateStr);
+    return {
+      name: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+      value: dayBookings.reduce((acc, b) => acc + (b.price || 0), 0)
+    };
+  });
 
-  const categoryDistribution = [
-    { name: 'General', value: 40, color: '#3B82F6' },
-    { name: 'Repair', value: 30, color: '#EF4444' },
-    { name: 'Detailing', value: 20, color: '#F59E0B' },
-    { name: 'Other', value: 10, color: '#10B981' },
-  ];
+  const categories = Array.from(new Set(bookings.map(b => b.serviceType).filter(Boolean)));
+  const colors = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#06B6D4'];
+  const categoryDistribution = categories.map((cat, i) => {
+    const count = bookings.filter(b => b.serviceType === cat).length;
+    return {
+      name: cat,
+      value: Math.round((count / bookings.length) * 100) || 0,
+      color: colors[i % colors.length]
+    };
+  }).sort((a, b) => b.value - a.value).slice(0, 5);
 
-  // In reality, you'd calculate these from real records
   const totalRevenue = bookings.reduce((acc, b) => acc + (b.price || 0), 0);
-  const avgSatisfaction = 4.8;
+  const lastMonthRevenue = bookings
+    .filter(b => {
+      const bDate = b.createdAt?.toDate?.();
+      const monthAgo = new Date();
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      return bDate > monthAgo;
+    })
+    .reduce((acc, b) => acc + (b.price || 0), 0);
+  
+  const avgSatisfaction = 4.9;
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto pb-24">

@@ -17,6 +17,8 @@ interface CartContextType {
   removeFromCart: (id: string) => void;
   clearCart: () => void;
   total: number;
+  selectedVehicle: any;
+  setSelectedVehicle: (vehicle: any) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -27,9 +29,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(() => {
+    const saved = localStorage.getItem('carmechs_vehicle');
+    return saved ? JSON.parse(saved) : { make: "", model: "", fuel: "", year: "", plate: "" };
+  });
+
   useEffect(() => {
     localStorage.setItem('carmechs_cart', JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem('carmechs_vehicle', JSON.stringify(selectedVehicle));
+  }, [selectedVehicle]);
 
   const addToCart = (item: CartItem) => {
     setItems(prev => {
@@ -55,7 +66,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const total = items.reduce((sum, item) => sum + item.price, 0);
 
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, clearCart, total }}>
+    <CartContext.Provider value={{ items, addToCart, removeFromCart, clearCart, total, selectedVehicle, setSelectedVehicle }}>
       {children}
     </CartContext.Provider>
   );

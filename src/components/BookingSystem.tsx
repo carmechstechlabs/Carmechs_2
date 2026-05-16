@@ -27,7 +27,10 @@ import {
   Wind,
   Shield,
   Hash,
-  Gauge
+  Gauge,
+  Sun,
+  RefreshCw,
+  Edit
 } from "lucide-react";
 import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -36,6 +39,7 @@ import { cn } from "../lib/utils";
 import { useConfig } from "../hooks/useConfig";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "react-toastify";
+import { useCart } from "../hooks/useCart";
 import { BookingFormSkeleton } from "./ui/Skeleton";
 import { sendConfirmationEmail, sendNewBookingAlert } from "../lib/mail";
 import { initializePayment } from "../lib/payment";
@@ -51,16 +55,17 @@ interface StepProps {
 }
 
 export default function BookingSystem({ onClose }: { onClose?: () => void }) {
+  const { items: cartItems, selectedVehicle, setSelectedVehicle } = useCart();
   const [step, setStep] = useState(1);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [bookingData, setBookingData] = useState({
-    carDetails: { make: "", model: "", fuel: "", year: "", plate: "", engine: "", brandLogo: "", modelLogo: "" },
+    carDetails: selectedVehicle || { make: "", model: "", fuel: "", year: "", plate: "", engine: "", brandLogo: "", modelLogo: "" },
     location: "Main Workshop - Mumbai Central", // Default
     locationId: "main-mumbai", // Default
     serviceId: "",
     serviceType: "",
-    cart: [] as any[],
-    price: 0,
+    cart: cartItems.length > 0 ? cartItems : [] as any[],
+    price: cartItems.reduce((acc: number, item: any) => acc + item.price, 0),
     appointmentDate: "",
     appointmentTime: "",
     mechanicId: "",
@@ -75,6 +80,11 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
     discount: 0,
     saveVehicle: false
   });
+
+  useEffect(() => {
+    // Sync shared vehicle state whenever local vehicle details change
+    setSelectedVehicle(bookingData.carDetails);
+  }, [bookingData.carDetails]);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => {
@@ -801,54 +811,59 @@ function VehicleStep({ onNext, data, updateData, userGarage = [] }: StepProps) {
               <label className="text-[10px] font-black uppercase tracking-widest text-primary ml-1 flex items-center gap-2">
                 <Fuel size={12} /> Energy Source (Fuel)
               </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                  {(() => {
-                   const commonFuels = ["Petrol", "Diesel", "Electric", "Hybrid", "CNG"];
+                   const commonFuels = ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"];
                    const selectedModelObj = carHub[data.make]?.models.find((m: any) => m.name === data.model);
                    const availableFuels = selectedModelObj?.fuelTypes && selectedModelObj.fuelTypes.length > 0 
                      ? selectedModelObj.fuelTypes 
                      : commonFuels;
                    const fuelIcons: any = {
-                     "Petrol": { icon: Fuel, color: "text-amber-500", bg: "bg-amber-50" },
-                     "Diesel": { icon: Droplets, color: "text-blue-500", bg: "bg-blue-50" },
-                     "CNG": { icon: Wind, color: "text-emerald-500", bg: "bg-emerald-50" },
-                     "Electric": { icon: Zap, color: "text-cyan-500", bg: "bg-cyan-50" },
-                     "Hybrid": { icon: Zap, color: "text-indigo-500", bg: "bg-indigo-50" },
-                     "LPG": { icon: Fuel, color: "text-orange-500", bg: "bg-orange-50" },
-                     "Manual": { icon: Droplets, color: "text-primary", bg: "bg-primary-soft" }
+                     "Petrol": { icon: Fuel, color: "text-amber-500", bg: "bg-amber-50", label: "Internal Combustion" },
+                     "Diesel": { icon: Droplets, color: "text-blue-500", bg: "bg-blue-50", label: "High Compression" },
+                     "CNG": { icon: Wind, color: "text-emerald-500", bg: "bg-emerald-50", label: "Clean Gas" },
+                     "Electric": { icon: Zap, color: "text-cyan-500", bg: "bg-cyan-50", label: "Zero Emission" },
+                     "Electric (EV)": { icon: Zap, color: "text-cyan-500", bg: "bg-cyan-50", label: "High Voltage" },
+                     "Hybrid": { icon: RefreshCw, color: "text-indigo-500", bg: "bg-indigo-50", label: "Dual Power" },
+                     "Solar": { icon: Sun, color: "text-yellow-500", bg: "bg-yellow-50", label: "Photon Array" },
+                     "LPG": { icon: Fuel, color: "text-orange-500", bg: "bg-orange-50", label: "Petroleum Gas" },
+                     "Manual": { icon: Edit, color: "text-primary", bg: "bg-primary-soft", label: "Custom Spec" }
                    };
                    const fuels = [...(availableFuels || []), "Manual"];
                    return fuels.map((fName: string) => {
-                      const f = fuelIcons[fName] || { icon: Fuel, color: "text-slate-500", bg: "bg-amber-50" };
+                      const f = fuelIcons[fName] || { icon: Fuel, color: "text-slate-500", bg: "bg-slate-50", label: "Engine Feed" };
                       const isSelected = data.fuel === fName;
                       return (
                        <div key={fName} className="space-y-3">
                          <button 
                            onClick={() => updateData({ ...data, fuel: fName })}
                            className={cn(
-                             "w-full p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 group relative overflow-hidden",
+                             "w-full p-6 rounded-[2rem] border-2 transition-all flex flex-col items-center gap-3 group relative overflow-hidden",
                              isSelected ? "border-primary bg-primary-soft text-primary shadow-lg shadow-primary/10 scale-105" : "border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white"
                            )}
                          >
                            {isSelected && (
-                             <motion.div layoutId="fuel-check" className="absolute top-2 right-2 text-primary">
-                               <CheckCircle2 size={14} />
+                             <motion.div layoutId="fuel-check" className="absolute top-3 right-3 text-primary">
+                               <CheckCircle2 size={16} />
                              </motion.div>
                            )}
-                           <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform", isSelected ? "bg-white" : f.bg)}>
+                           <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm", isSelected ? "bg-white" : f.bg)}>
                              <f.icon size={20} className={f.color} />
                            </div>
-                           <span className="font-black uppercase text-[10px] tracking-widest">{fName}</span>
+                           <div className="text-center">
+                             <div className="font-black uppercase text-[10px] tracking-widest leading-none">{fName}</div>
+                             <div className={cn("text-[7px] font-bold uppercase tracking-tighter mt-1 opacity-50", isSelected ? "text-primary" : "text-slate-400")}>{f.label}</div>
+                           </div>
                          </button>
                          {fName === "Manual" && isSelected && (
                            <motion.input 
                              initial={{ opacity: 0, y: -10 }}
                              animate={{ opacity: 1, y: 0 }}
                              type="text"
-                             placeholder="Specify Fuel..."
+                             placeholder="Ex: Bio-Ethanol..."
                              value={data.manualFuel || ""}
                              onChange={(e) => updateData({ ...data, manualFuel: e.target.value.toUpperCase() })}
-                             className="w-full bg-white border-2 border-primary/20 rounded-2xl px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary shadow-sm"
+                             className="w-full bg-white border-2 border-primary/20 rounded-2xl px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary shadow-sm text-center"
                            />
                          )}
                        </div>
@@ -1216,10 +1231,20 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
 
   useEffect(() => {
     if (!data.appointmentDate) return;
-    return onSnapshot(query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate)), (snap) => {
+    
+    // We fetch bookings for the day. 
+    // If a mechanic is selected, we filter by that mechanic to show THEIR availability.
+    // If no mechanic is selected, we show all bookings to give a general sense of occupancy, 
+    // or we could show slots as "busy" only if ALL mechanics are booked (but that's harder without knowing total mechanics).
+    // For now, let's filter specifically if a mechanic is chosen.
+    const q = selectedMechanic 
+      ? query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate), where("mechanicId", "==", selectedMechanic.id))
+      : query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate));
+
+    return onSnapshot(q, (snap) => {
       setBookedSlots(snap.docs.map(doc => doc.data().appointmentTime));
     });
-  }, [data.appointmentDate]);
+  }, [data.appointmentDate, selectedMechanic]);
 
   useEffect(() => {
     // Specifically fetch only available technicians as requested
@@ -1353,14 +1378,17 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
              {times
                .filter(t => {
-                 if (!selectedMechanic) return true;
-                 return isTimeSlotWithinWorkingHours(t, selectedMechanic.workingHours);
+                 // Always filter by working hours if mechanic is selected
+                 if (selectedMechanic) {
+                   return isTimeSlotWithinWorkingHours(t, selectedMechanic.workingHours);
+                 }
+                 return true; 
                })
                .map(t => {
-               const isBooked = bookedSlots.includes(t);
-               const isTechUnavailable = selectedMechanic?.unavailableSlots?.includes(`${data.appointmentDate}|${t}`);
-               const isSelected = data.appointmentTime === t;
-               const isDisabled = isBooked || isTechUnavailable;
+                const isBooked = bookedSlots.includes(t);
+                const isTechUnavailable = selectedMechanic?.unavailableSlots?.includes(`${data.appointmentDate}|${t}`);
+                const isSelected = data.appointmentTime === t;
+                const isDisabled = isBooked || isTechUnavailable;
 
                 return (
                   <div key={t} className="relative">
@@ -1416,14 +1444,19 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
             ) : mechanics.length > 0 ? (
                mechanics
                 .filter(m => {
-                  // Refined filtering based on working hours and unavailable slots
-                  if (!data.appointmentTime || !data.appointmentDate) return true;
-                  
-                  const isTechUnavailable = m.unavailableSlots?.includes(`${data.appointmentDate}|${data.appointmentTime}`);
-                  if (isTechUnavailable) return false;
+                  // If a time is already selected, only show mechanics available at that time
+                  if (data.appointmentTime && data.appointmentDate) {
+                    const isTechUnavailableAtTime = m.unavailableSlots?.includes(`${data.appointmentDate}|${data.appointmentTime}`);
+                    if (isTechUnavailableAtTime) return false;
 
-                  const isWithinHours = isTimeSlotWithinWorkingHours(data.appointmentTime, m.workingHours);
-                  return isWithinHours;
+                    const isWithinHours = isTimeSlotWithinWorkingHours(data.appointmentTime, m.workingHours);
+                    if (!isWithinHours) return false;
+
+                    // We should also check if THIS mechanic is booked at THIS time
+                    // But we don't have all bookings for all mechanics in memory easily.
+                    // This is handled better when the user selects the mechanic and the times filter.
+                  }
+                  return true;
                 })
                 .map(m => {
                   const isSelected = data.mechanicId === m.id;

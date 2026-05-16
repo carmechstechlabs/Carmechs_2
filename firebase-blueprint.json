@@ -30,6 +30,7 @@
           "enum": ["pending", "confirmed", "in-progress", "completed", "cancelled"],
           "description": "Current status of the booking"
         },
+        "reminderSent": { "type": "boolean", "description": "Flag to track if service reminder email was sent" },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the booking was created" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "When the booking was last updated" }
       },

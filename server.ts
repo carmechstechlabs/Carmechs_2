@@ -231,6 +231,35 @@ async function startServer() {
     res.json(result);
   });
 
+  app.post("/api/notify/booking-reminder", async (req, res) => {
+    const { email, fullName, booking } = req.body;
+    
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h1 style="color: #6366f1;">Tactical Reminder: Upcoming Service</h1>
+        <p>Dear ${fullName},</p>
+        <p>This is a reminder for your upcoming vehicle service deployment with CarMechs.</p>
+        <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e1e4e8;">
+          <p><strong>Booking ID:</strong> ${booking.id}</p>
+          <p><strong>Date:</strong> ${booking.appointmentDate}</p>
+          <p><strong>Time Window:</strong> ${booking.appointmentTime}</p>
+          <p><strong>Service Type:</strong> ${booking.serviceType}</p>
+        </div>
+        <p>Our expert technician will arrive at your location as scheduled. If you need to make any tactical adjustments, please contact us via our support node immediately.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #666; font-style: italic;">CarMechs Operations & Control Hub</p>
+      </div>
+    `;
+
+    const result = await sendEmail({
+      to: email,
+      subject: `Service Reminder: Upcoming Mission (${booking.appointmentDate})`,
+      html
+    });
+
+    res.json(result);
+  });
+
   // Notifications: New Inquiry
   app.post("/api/notify/new-inquiry", async (req, res) => {
     const { name, email, phone, message } = req.body;
@@ -367,6 +396,37 @@ async function startServer() {
     const result = await sendEmail({
       to: process.env.ADMIN_EMAIL || sysConfig.supportEmail || "carmechstechlabs@gmail.com",
       subject: `🚨 [NEW BOOKING] ${fullName} - ${city} (#${id.substring(0, 8)})`,
+      html
+    });
+
+    res.json(result);
+  });
+
+  // Notifications: Booking Reminder
+  app.post("/api/notify/booking-reminder", async (req, res) => {
+    const { email, fullName, bookingId, carModel, serviceType, date, time } = req.body;
+    
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #6366f1; border-radius: 10px;">
+        <h1 style="color: #6366f1;">Upcoming Service Reminder</h1>
+        <p>Dear ${fullName},</p>
+        <p>This is a friendly reminder for your scheduled vehicle service.</p>
+        <div style="background: #f5f3ff; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #c7d2fe;">
+          <p style="margin: 5px 0;"><strong>Vehicle:</strong> ${carModel}</p>
+          <p style="margin: 5px 0;"><strong>Service:</strong> ${serviceType}</p>
+          <p style="margin: 5px 0;"><strong>Date:</strong> ${date}</p>
+          <p style="margin: 5px 0;"><strong>Arrival Window:</strong> ${time}</p>
+        </div>
+        <p>Please ensure the vehicle is accessible and any security gates are notified of our technician's arrival.</p>
+        <p style="margin-top: 20px;">Need to reschedule? Reply to this email or visit our dashboard.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #666;">CarMechs Operations Control</p>
+      </div>
+    `;
+
+    const result = await sendEmail({
+      to: email,
+      subject: `Reminder: Your ${serviceType} service is coming up!`,
       html
     });
 
