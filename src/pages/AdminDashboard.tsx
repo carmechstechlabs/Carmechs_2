@@ -143,7 +143,8 @@ export default function AdminDashboard() {
     seoDescription: "Professional door-step car repair and detailing services.",
     seoKeywords: "car repair, doorstep mechanic, car wash, detailing",
     navLinks: [{ name: "Services", href: "#services" }, { name: "Mechanics", href: "#mechanics" }],
-    footerLegalLinks: [{ name: "Privacy Policy", href: "/privacy" }, { name: "Terms of Service", href: "/terms" }]
+    footerLegalLinks: [{ name: "Privacy Policy", href: "/privacy" }, { name: "Terms of Service", href: "/terms" }],
+    fuelTypes: ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"]
   });
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -869,7 +870,7 @@ export default function AdminDashboard() {
           <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-secondary/5 rounded-full -ml-64 -mb-64 blur-[120px] pointer-events-none" />
           
           <div className="relative z-10">
-            {activeTab === "overview" && <OverviewTab bookings={bookings} onTabChange={handleTabChange} />}
+            {activeTab === "overview" && <OverviewTab bookings={bookings} usersList={usersList} onTabChange={handleTabChange} />}
             {activeTab === "bookings" && <BookingsTab bookings={bookings} mechanics={mechanics} loading={loadingBookings} />}
             {activeTab === "reports" && <ReportsTab bookings={bookings} />}
             {activeTab === "mechanics" && <TechniciansTab />}
@@ -895,22 +896,25 @@ export default function AdminDashboard() {
   );
 }
 
-function OverviewTab({ bookings, onTabChange }: { bookings: any[], onTabChange: (tab: string) => void }) {
+function OverviewTab({ bookings, usersList, onTabChange }: { bookings: any[], usersList: any[], onTabChange: (tab: string) => void }) {
   const totalRevenue = bookings.reduce((acc, b) => acc + (b.price || 0), 0);
   const avgOrderValue = bookings.length > 0 ? (totalRevenue / bookings.length).toFixed(0) : "0";
   const confirmedBookings = bookings.filter(b => b.status === "confirmed" || b.status === "completed").length;
   const missionSuccessRate = bookings.length > 0 ? ((confirmedBookings / bookings.length) * 100).toFixed(1) : "0";
 
+  const activeUsers = usersList.length;
+  const totalTechnicians = usersList.filter(u => u.role === 'mechanic').length;
+
   const stats = [
-    { name: "Total Engagement", value: bookings.length.toString(), icon: Users, color: "text-blue-500", trend: "+12.5%", label: "MISSIONS_DEPLOAYED" },
+    { name: "Total Users", value: activeUsers.toString(), icon: Users, color: "text-blue-500", trend: "+12%", label: "VERIFIED_BIOMETRICS" },
     { name: "Live Operations", value: bookings.filter(b => b.status === "in-progress" || b.status === "confirmed").length.toString(), icon: Zap, color: "text-yellow-500", trend: "+5.2%", label: "ACTIVE_CIRCUITS" },
-    { name: "Mission Success", value: `${missionSuccessRate}%`, icon: Gauge, color: "text-emerald-500", trend: "+0.8%", label: "STABILITY_INDEX" },
+    { name: "Fleet Size", value: totalTechnicians.toString(), icon: Wrench, color: "text-indigo-500", trend: "+2", label: "AVAIL_MECHANICS" },
     { name: "Monthly Revenue", value: `₹${totalRevenue.toLocaleString()}`, icon: TrendingUp, color: "text-rose-500", trend: "+24.1%", label: "WEALTH_FLOW" },
   ];
 
   const secondaryKPIs = [
+    { name: "Total Missions", value: bookings.length.toString(), icon: Calendar, color: "text-accent-blue" },
     { name: "Avg. Mission Value", value: `₹${Number(avgOrderValue).toLocaleString()}`, icon: DollarSign, color: "text-accent-blue" },
-    { name: "User Retention", value: "84%", icon: RefreshCcw, color: "text-primary" },
     { name: "Conversion Rate", value: "12.4%", icon: Target, color: "text-accent-red" },
     { name: "Support Rating", value: "4.9/5", icon: Star, color: "text-yellow-400" },
   ];
@@ -3668,6 +3672,42 @@ function ContentTab({ config, setConfig }: { config: any, setConfig: any }) {
                 + ADD_LEGAL_NODE
               </button>
             </div>
+
+            <div className="space-y-4 pt-10 border-t border-white/5">
+              <h4 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                <Fuel size={14} className="text-accent-red" /> Operational Fuel Matrix
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                {(config.fuelTypes || ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"]).map((fuel: string, idx: number) => (
+                  <div key={idx} className="group p-3 bg-black/40 rounded-xl border border-white/5 flex gap-3 items-center">
+                    <input 
+                      type="text" value={fuel} 
+                      onChange={(e) => {
+                        const updated = [...(config.fuelTypes || ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"])];
+                        updated[idx] = e.target.value;
+                        setConfig({ ...config, fuelTypes: updated });
+                      }}
+                      className="flex-1 bg-transparent text-[10px] font-black uppercase text-white outline-none focus:text-accent-red transition-colors"
+                    />
+                    <button 
+                      onClick={() => {
+                        const updated = (config.fuelTypes || ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"]).filter((_: any, i: number) => i !== idx);
+                        setConfig({ ...config, fuelTypes: updated });
+                      }}
+                      className="text-rose-500/20 hover:text-rose-500 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button 
+                onClick={() => setConfig({ ...config, fuelTypes: [...(config.fuelTypes || ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"]), "NEW_SOURCE"] })}
+                className="w-full py-3 mt-2 border border-dashed border-white/10 rounded-xl text-[9px] font-black uppercase text-text-dim hover:text-white transition-all hover:bg-white/5"
+              >
+                + INITIALIZE_FUEL_PROTOCOL
+              </button>
+            </div>
           </div>
         </div>
 
@@ -5435,6 +5475,23 @@ function FeedbackTab() {
 
 function SettingsTab({ user, config, setConfig }: { user: any, config: any, setConfig: any }) {
   const [saving, setSaving] = useState(false);
+  const [newFuelType, setNewFuelType] = useState("");
+
+  const addFuelType = () => {
+    if (!newFuelType.trim()) return;
+    if (config.fuelTypes?.includes(newFuelType.trim())) {
+      toast.warn("Fuel type already exists in tactical registry.");
+      return;
+    }
+    const updatedFuelTypes = [...(config.fuelTypes || []), newFuelType.trim()];
+    setConfig({ ...config, fuelTypes: updatedFuelTypes });
+    setNewFuelType("");
+  };
+
+  const removeFuelType = (fuel: string) => {
+    const updatedFuelTypes = config.fuelTypes?.filter((f: string) => f !== fuel);
+    setConfig({ ...config, fuelTypes: updatedFuelTypes });
+  };
 
   const handleSaveConfig = async () => {
     setSaving(true);
@@ -5514,6 +5571,44 @@ function SettingsTab({ user, config, setConfig }: { user: any, config: any, setC
                        className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-bold text-white outline-none focus:border-primary transition-all"
                      />
                   </div>
+               </div>
+
+               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary flex items-center gap-3 mt-10">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  Fuel Matrix Control
+               </h3>
+               <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5">
+                  <div className="flex flex-wrap gap-3">
+                     {(config.fuelTypes || []).map((fuel: string) => (
+                        <div key={fuel} className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/5 group hover:border-primary/30 transition-all">
+                           <span className="text-[10px] font-black text-white uppercase tracking-widest italic">{fuel}</span>
+                           <button 
+                             onClick={() => removeFuelType(fuel)}
+                             className="text-text-dim hover:text-rose-500 transition-colors"
+                           >
+                              <X size={12} />
+                           </button>
+                        </div>
+                     ))}
+                  </div>
+                  <div className="flex gap-4">
+                     <input 
+                        value={newFuelType}
+                        onChange={e => setNewFuelType(e.target.value)}
+                        placeholder="Add New Fuel Type (e.g. Hydrogen)"
+                        className="flex-1 bg-black/20 border border-white/5 rounded-xl px-5 py-3 text-[10px] font-bold text-white outline-none focus:border-primary transition-all uppercase tracking-widest placeholder:text-slate-600"
+                        onKeyDown={(e) => e.key === 'Enter' && addFuelType()}
+                     />
+                     <button 
+                        onClick={addFuelType}
+                        className="bg-primary text-white p-3 rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
+                     >
+                        <Plus size={20} />
+                     </button>
+                  </div>
+                  {(!config.fuelTypes || config.fuelTypes.length === 0) && (
+                     <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest italic text-center">No tactical fuel variants configured.</p>
+                  )}
                </div>
 
                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary flex items-center gap-3 mt-8">

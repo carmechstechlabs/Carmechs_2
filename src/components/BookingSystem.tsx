@@ -55,6 +55,7 @@ interface StepProps {
 }
 
 export default function BookingSystem({ onClose }: { onClose?: () => void }) {
+  const { config } = useConfig();
   const { items: cartItems, selectedVehicle, setSelectedVehicle } = useCart();
   const [step, setStep] = useState(1);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
@@ -424,6 +425,7 @@ function LocationStep({ onNext, onBack, data, updateData }: { onNext: () => void
 }
 
 function VehicleStep({ onNext, data, updateData, userGarage = [] }: StepProps) {
+  const { config } = useConfig();
   const [search, setSearch] = useState("");
   const [carHub, setCarHub] = useState<any>({});
   const [step, setStep] = useState(1); // 1: Brand, 2: Model, 3: Fuel, 4: Details
@@ -813,7 +815,7 @@ function VehicleStep({ onNext, data, updateData, userGarage = [] }: StepProps) {
               </label>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                  {(() => {
-                   const commonFuels = ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"];
+                   const commonFuels = config.fuelTypes || ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"];
                    const selectedModelObj = carHub[data.make]?.models.find((m: any) => m.name === data.model);
                    const availableFuels = selectedModelObj?.fuelTypes && selectedModelObj.fuelTypes.length > 0 
                      ? selectedModelObj.fuelTypes 
@@ -2138,7 +2140,9 @@ function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps &
                             {data.carDetails.make} {data.carDetails.model}
                             {data.carDetails.modelLogo && <img src={data.carDetails.modelLogo} alt="" className="h-3 object-contain opacity-50" />}
                           </div>
-                          <div className="text-[10px] font-bold text-primary uppercase tracking-widest">{data.carDetails.fuel} • {data.carDetails.year} • {data.carDetails.plate}</div>
+                          <div className="text-[10px] font-bold text-primary uppercase tracking-widest">
+                            {data.carDetails.fuel === 'MANUAL' ? (data.carDetails.manualFuel || 'MANUAL') : data.carDetails.fuel} • {data.carDetails.year} • {data.carDetails.plate}
+                          </div>
                        </div>
                     </div>
                 </div>
@@ -2362,7 +2366,7 @@ function SummaryStep({ onNext, onBack, goToStep, data, updateData }: StepProps &
                 <h3 className="text-3xl font-black text-ink mb-8 uppercase italic tracking-tighter">Final Manifest Review</h3>
                 <div className="space-y-6 mb-10">
                   <ReviewItem label="Service Class" value={data.serviceType} />
-                  <ReviewItem label="Vehicle Unit" value={`${data.carDetails.make} ${data.carDetails.model} (${data.carDetails.fuel})`} />
+                  <ReviewItem label="Vehicle Unit" value={`${data.carDetails.make} ${data.carDetails.model} (${data.carDetails.fuel === 'MANUAL' ? (data.carDetails.manualFuel || 'MANUAL') : data.carDetails.fuel})`} />
                   <ReviewItem label="Deployment Hub" value={data.city} />
                   <ReviewItem label="Tactical Address" value={data.address} />
                   <ReviewItem label="Deployment Date" value={new Date(data.appointmentDate).toDateString()} />

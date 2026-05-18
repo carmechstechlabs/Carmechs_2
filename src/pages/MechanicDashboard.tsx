@@ -30,9 +30,10 @@ import { cn } from '../lib/utils';
 
 export default function MechanicDashboard() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'bookings' | 'profile' | 'schedule'>('bookings');
+  const [activeTab, setActiveTab] = useState<'bookings' | 'available' | 'profile' | 'schedule'>('bookings');
   const [techProfile, setTechProfile] = useState<any>(null);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [availableBookings, setAvailableBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -69,10 +70,23 @@ export default function MechanicDashboard() {
          const dateB = b.createdAt?.seconds || 0;
          return dateB - dateA;
       }));
+    });
+
+    const availableQuery = query(
+      collection(db, "bookings"), 
+      where("status", "in", ["pending", "confirmed"]),
+      where("mechanicId", "==", "")
+    );
+    const unsubAvailable = onSnapshot(availableQuery, (snap) => {
+      const bData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAvailableBookings(bData);
       setLoading(false);
     });
 
-    return () => unsubBookings();
+    return () => {
+      unsubBookings();
+      unsubAvailable();
+    };
   }, [techProfile?.id]);
 
   if (loading) {
@@ -157,6 +171,13 @@ export default function MechanicDashboard() {
                 count={bookings.filter(b => b.status !== 'completed').length}
               />
               <NavButton 
+                active={activeTab === 'available'} 
+                onClick={() => { setActiveTab('available'); setSidebarOpen(false); }}
+                icon={Star}
+                label="Deployment Pool"
+                count={availableBookings.length}
+              />
+              <NavButton 
                 active={activeTab === 'schedule'} 
                 onClick={() => { setActiveTab('schedule'); setSidebarOpen(false); }}
                 icon={Clock}
@@ -202,6 +223,10 @@ export default function MechanicDashboard() {
               <BookingsSection techId={techProfile.id} bookings={bookings} />
             )}
             
+            {activeTab === 'available' && (
+              <AvailableSection techId={techProfile.id} techName={techProfile.name} bookings={availableBookings} />
+            )}
+
             {activeTab === 'schedule' && (
                <ScheduleSection techProfile={techProfile} />
             )}
@@ -476,7 +501,35 @@ function BookingsSection({ bookings }: { techId: string, bookings: any[] }) {
   );
 }
 
-function BookingCard({ booking }: { booking: any }) {
+function AvailableSection({ techId, techName, bookings }: { techId: string, techName: string, bookings: any[] }) {
+  return (
+    <div className="space-y-10">
+      <header>
+         <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter mb-4">Deployment Pool</h2>
+         <p className="text-xs text-text-dim uppercase font-black tracking-widest flex items-center gap-3">
+            <Star size={14} className="text-accent-red" />
+            Unassigned Missions Available for Deployment
+         </p>
+      </header>
+
+      <div className="grid grid-cols-1 gap-6">
+         {bookings.map(booking => (
+           <BookingCard key={booking.id} booking={booking} available techId={techId} techName={techName} />
+         ))}
+         {bookings.length === 0 && (
+           <div className="py-32 flex flex-col items-center gap-6 bg-white/5 border border-dashed border-white/10 rounded-[3rem]">
+              <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
+                 <Wrench size={32} className="text-neutral-800" />
+              </div>
+              <div className="text-[11px] font-black uppercase tracking-[0.5em] text-neutral-600">All sectors clear // No pending missions</div>
+           </div>
+         )}
+      </div>
+    </div>
+  );
+}
+
+function BookingCard({ booking, available = false, techId, techName }: { booking: any, available?: boolean, techId?: string, techName?: string }) {
   const [status, setStatus] = useState(booking.status);
   const [updating, setUpdating] = useState(false);
 
@@ -488,6 +541,39 @@ function BookingCard({ booking }: { booking: any }) {
         updatedAt: serverTimestamp()
       });
       setStatus(newStatus);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const acceptBooking = async () => {
+    if (!techId || !techName) return;
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, "bookings", booking.id), {
+        mechanicId: techId,
+        mechanicName: techName,
+        status: 'confirmed',
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const declineBooking = async () => {
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, "bookings", booking.id), {
+        mechanicId: "",
+        mechanicName: "",
+        status: 'pending',
+        updatedAt: serverTimestamp()
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -586,41 +672,47 @@ function BookingCard({ booking }: { booking: any }) {
              )}
 
              <div className="flex flex-wrap gap-3">
-                {status !== 'completed' && status !== 'cancelled' && (
-                  <>
-                    <StatusButton 
-                      onClick={() => updateStatus('in-progress')}
-                      active={status === 'in-progress'}
-                      disabled={updating}
-                      icon={Clock}
-                      label="Deploy Node"
-                      color="blue"
-                    />
-                    <StatusButton 
-                      onClick={() => updateStatus('completed')}
-                      active={status === 'completed'}
-                      disabled={updating}
-                      icon={CheckCircle}
-                      label="Neutralize Target"
-                      color="emerald"
-                    />
-                  </>
-                )}
-                {status === 'pending' && (
+                {available ? (
                    <StatusButton 
-                    onClick={() => updateStatus('confirmed')}
-                    active={status === 'confirmed'}
-                    disabled={updating}
-                    icon={CheckCircle}
-                    label="Accept Mission"
-                    color="emerald"
-                  />
+                     onClick={acceptBooking}
+                     disabled={updating}
+                     icon={CheckCircle}
+                     label="Accept Mission"
+                     color="emerald"
+                   />
+                ) : (
+                  <>
+                    {status !== 'completed' && status !== 'cancelled' && (
+                      <>
+                        <StatusButton 
+                          onClick={() => updateStatus('in-progress')}
+                          active={status === 'in-progress'}
+                          disabled={updating}
+                          icon={Clock}
+                          label="Deploy Node"
+                          color="blue"
+                        />
+                        <StatusButton 
+                          onClick={() => updateStatus('completed')}
+                          disabled={updating}
+                          icon={CheckCircle}
+                          label="Neutralize Task"
+                          color="emerald"
+                        />
+                        <StatusButton 
+                          onClick={declineBooking}
+                          disabled={updating}
+                          icon={X}
+                          label="Decline Mission"
+                          color="rose"
+                        />
+                      </>
+                    )}
+                  </>
                 )}
              </div>
           </div>
        </div>
-
-       <div className="absolute -top-10 -right-10 w-40 h-40 bg-accent-red/5 rounded-full blur-3xl" />
     </motion.div>
   );
 }

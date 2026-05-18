@@ -37,6 +37,7 @@ export interface UIConfig {
   baseFontSize: number;
   fontColor?: string;
   headingColor?: string;
+  fuelTypes?: string[];
 }
 
 const DEFAULT_CONFIG: UIConfig = {
@@ -74,6 +75,7 @@ const DEFAULT_CONFIG: UIConfig = {
   baseFontSize: 16,
   fontColor: "#1e293b",
   headingColor: "#0f172a",
+  fuelTypes: ["Petrol", "Diesel", "Electric (EV)", "Hybrid", "CNG", "Solar"]
 };
 
 export function useConfig() {

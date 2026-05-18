@@ -366,6 +366,44 @@ async function startServer() {
     const { fullName, phone, carModel, serviceType, appointmentDate, appointmentTime, city, id, price } = booking;
     const sysConfig = await getSystemConfig() as any;
     
+    // Broadcast to mechanics in the same city
+    try {
+      const mechanicsSnap = await dbAdmin.collection("technicians")
+        .where("city", "==", city)
+        .where("status", "==", "available")
+        .get();
+      
+      const mechanicEmails = mechanicsSnap.docs.map(doc => doc.data().email).filter(Boolean);
+      
+      if (mechanicEmails.length > 0) {
+        const mechHtml = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 2px solid #6366f1; border-radius: 10px; background: #fff;">
+            <div style="background: #6366f1; color: #fff; padding: 10px 20px; border-radius: 5px; margin-bottom: 20px;">
+              <strong style="text-transform: uppercase;">New Mission Alert</strong>
+            </div>
+            <h2 style="margin: 0 0 20px 0; font-size: 20px; text-transform: uppercase;">Available Deployment in ${city}</h2>
+            <div style="margin-bottom: 20px; background: #f3f4f6; padding: 20px; border-radius: 10px;">
+              <p><strong>Service:</strong> ${serviceType}</p>
+              <p><strong>Vehicle:</strong> ${carModel}</p>
+              <p><strong>Schedule:</strong> ${appointmentDate} @ ${appointmentTime}</p>
+              <p><strong>Offer Value:</strong> ₹${price}</p>
+            </div>
+            <p>Login to your Mechanic Dashboard to claim this mission immediately.</p>
+            <p style="font-size: 10px; color: #999; margin-top: 30px; text-transform: uppercase;">CarMechs Automated Dispatch</p>
+          </div>
+        `;
+
+        // Send to all relevant mechanics
+        await Promise.all(mechanicEmails.map(mEmail => sendEmail({
+          to: mEmail,
+          subject: `🚨 [NEW MISSION] ${serviceType} available in ${city}!`,
+          html: mechHtml
+        })));
+      }
+    } catch (broadcastErr) {
+      console.error("Mechanic broadcast failed:", broadcastErr);
+    }
+
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 2px solid #000; border-radius: 10px; background: #fff;">
         <div style="background: #000; color: #fff; padding: 10px 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
