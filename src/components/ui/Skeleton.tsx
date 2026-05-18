@@ -37,6 +37,28 @@ export function ServiceCardSkeleton({ count = 1 }: { count?: number }) {
   );
 }
 
+export function TechnicianSkeleton({ count = 1 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="p-8 rounded-[3rem] border-2 border-slate-100 bg-white space-y-6 animate-pulse">
+          <div className="flex items-center gap-6">
+            <div className="w-20 h-20 rounded-[2.5rem] bg-slate-100" />
+            <div className="flex-1 space-y-3">
+              <div className="h-6 bg-slate-100 rounded-lg w-3/4" />
+              <div className="h-4 bg-slate-50 rounded-lg w-1/2" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-10 bg-slate-50 rounded-2xl" />
+            <div className="h-10 bg-slate-50 rounded-2xl" />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function BookingFormSkeleton() {
   return (
     <div className="space-y-8 animate-pulse">

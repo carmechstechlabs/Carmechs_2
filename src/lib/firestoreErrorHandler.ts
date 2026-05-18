@@ -45,6 +45,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   
   const jsonError = JSON.stringify(errInfo);
-  console.error('Firestore Error: ', jsonError);
-  throw new Error(jsonError);
+  console.error('Firestore Protocol Error Documented:', jsonError);
+  // We log but don't throw to prevent uncaught exceptions from crashing the UI thread/listeners
+  // The caller can still throw if they specifically catch and re-handle.
 }

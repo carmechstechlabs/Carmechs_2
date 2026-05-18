@@ -58,6 +58,17 @@
              "end": { "type": "string" }
           }
         },
+        "blockedDateRanges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "start": { "type": "string", "format": "date" },
+              "end": { "type": "string", "format": "date" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "status"]
@@ -74,6 +85,8 @@
         "category": { "type": "string" },
         "isActive": { "type": "boolean" },
         "icon": { "type": "string", "description": "Lucide icon name" },
+        "duration": { "type": "string", "description": "Estimated time to complete, e.g., '2 hrs'" },
+        "requiredParts": { "type": "array", "items": { "type": "string" }, "description": "List of parts needed" },
         "notes": { "type": "string", "description": "Internal admin notes" },
         "imageUrl": { "type": "string", "description": "URL of the service image" },
         "features": { 
@@ -253,9 +266,26 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["bookingId", "rating", "createdAt"]
+    },
+    "category": {
+      "title": "Service Category",
+      "description": "Group for organizing services.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
+    "/categories/{categoryId}": {
+      "schema": "category",
+      "description": "Organizational categories for services available on the platform."
+    },
     "/bookings/{bookingId}": {
       "schema": "booking",
       "description": "Store for all car service bookings."
@@ -303,6 +333,26 @@
     "/technicians/{technicianId}": {
       "schema": "technician",
       "description": "Store for technician profiles and availability."
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": "vehicle",
+      "description": "Saved vehicle configurations (root collection version)."
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "feedback",
+      "description": "Contact form inquiries from the landing page."
+    },
+    "/testimonials/{id}": {
+      "schema": "feedback",
+      "description": "Public testimonials for the platform."
+    },
+    "/posts/{id}": {
+      "schema": "task",
+      "description": "Blog posts or news updates."
+    },
+    "/admins/{adminId}": {
+      "schema": "user",
+      "description": "Authorized administrators list."
     }
   }
 }

@@ -1,23 +1,27 @@
-# Security Specification for CarMechs
+# Security Specification: CarMechs Deployment
 
-## Data Invariants
-1. A booking must have a valid `fullName` (string, max 128 chars).
-2. A booking must have a valid `phone` (string, max 15 chars, matches digits).
-3. A booking `status` must be one of: `['pending', 'confirmed', 'in-progress', 'completed', 'cancelled']`.
-4. `createdAt` must be set to `request.time` on creation and be immutable.
-5. Clients (non-admins) can ONLY create bookings. They cannot read or list them.
-6. Admins (identified by document in `/admins/{uid}`) have full access.
+## 1. Data Invariants
+- A **Booking** cannot exist without a valid service name, customer name, and status. The `price` must be a positive number.
+- A **Feedback** must reference a valid `bookingId`.
+- **Technician** profiles are public for viewing but can only be modified by admins.
+- **Support Tickets** are private to the user who created them.
+- **Admin Tasks** are strictly restricted to admin users.
+- User **Roles** are immutable by the user themselves to prevent privilege escalation.
 
-## The Dirty Dozen Payloads (Rejection Targets)
-1. **Identity Spoofing**: Attempt to create a booking with a fake `fullName` that is 5MB.
-2. **State Shortcutting**: Attempt to create a booking with `status: 'completed'`.
-3. **Malicious ID**: Attempt to create a booking at `/bookings/../../illegal_path`.
-4. **Illegal Field**: Attempt to add an `isAdmin: true` field to a booking.
-5. **Unauthorized Read**: A normal user trying to `list` all bookings.
-6. **Unauthorized Update**: A customer trying to change their booking `status` to `confirmed`.
-7. **Timestamp Fraud**: Setting `createdAt` to a historical or future date instead of `request.time`.
-8. **Owner Hijack**: Attempting to update a booking's `phone` number after it's been created.
-9. **Junk ID Poisoning**: Using a 1KB string as a document ID.
-10. **Admin Privilege Escalation**: A normal user trying to create a document in `/admins/`.
-11. **Type Mismatch**: Sending `phone: 12345` (number instead of string).
-12. **PII Leak**: A normal user trying to `get` another customer's booking document.
+## 2. The "Dirty Dozen" Payloads (Rejected Cases)
+
+1. **Identity Spoofing**: Attempt to create a booking for another user's email.
+2. **Privilege Escalation**: Attempt to update own user profile `role` to 'admin'.
+3. **Shadow Update**: Attempt to inject `isVerified: true` into a booking.
+4. **Orphaned Feedback**: Create feedback for a non-existent `bookingId`.
+5. **PII Leak**: Non-admin attempting to list all user profiles.
+6. **Price Manipulation**: Creating a booking with `price: 0`.
+7. **Invalid ID**: Creating a document with a 2KB garbage string as ID.
+8. **Resource Exhaustion**: Sending a 1MB string in a `message` field.
+9. **Illegal State Transition**: Updating a 'completed' booking back to 'pending'.
+10. **Unauthorized Support Access**: Reading another user's `tickets`.
+11. **Admin Bypass**: Attempting to write to `config/settings`.
+12. **Spam Referral**: Creating 1000 referral records in 1 minute (throttling check).
+
+## 3. The Test Runner (Plan)
+I will implement `firestore.rules.test.ts` to verify these constraints.

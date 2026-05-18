@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useParams, useLocation } from "react-router-dom";
 import { 
   Users, 
   User,
@@ -72,10 +73,11 @@ import {
   RefreshCcw,
   Target,
   MapPin,
+  Layers,
+  Sparkles,
+  Key,
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart as RechartsPie, Pie } from 'recharts';
-
-import { GoogleGenAI } from "@google/genai";
 
 const ICON_MAP: Record<string, any> = {
   Wrench, Battery, Gauge, Droplets, Disc, Settings, Shield, ShieldCheck, Zap, Activity, Car, Fuel, Thermometer, Settings2
@@ -584,6 +586,18 @@ export default function AdminDashboard() {
     }
   };
 
+  const { "*": path } = useParams();
+  const portalSlug = path?.startsWith("login/") ? path.split("/")[1] : null;
+
+  const [portalLoc, setPortalLoc] = useState<any>(null);
+
+  useEffect(() => {
+    if (portalSlug && locations.length > 0) {
+      const found = locations.find(l => l.slug === portalSlug || l.id === portalSlug);
+      if (found) setPortalLoc(found);
+    }
+  }, [portalSlug, locations]);
+
   if (!user) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-bg-soft px-4 font-sans">
@@ -596,11 +610,23 @@ export default function AdminDashboard() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -mr-16 -mt-16 blur-3xl" />
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-2xl" />
 
-          <div className="bg-primary w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white mx-auto mb-8 shadow-lg rotate-3">
-            <Shield size={32} />
-          </div>
-          <h1 className="text-4xl font-black text-ink mb-3 tracking-tighter">Welcome Back!</h1>
-          <p className="text-slate-500 mb-10 text-sm font-medium">Log in to manage the CarMechs universe.</p>
+          {portalLoc ? (
+             <div className="mb-8">
+                <div className="w-16 h-16 rounded-[1.5rem] bg-indigo-600 text-white flex items-center justify-center mx-auto mb-4 shadow-lg border-4 border-white">
+                   <Globe size={32} />
+                </div>
+                <h2 className="text-2xl font-black text-ink uppercase tracking-tight italic">{portalLoc.name}</h2>
+                <div className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mt-2 italic px-3 py-1 bg-primary/10 rounded-full w-fit mx-auto border border-primary/10">Location Command Center</div>
+             </div>
+          ) : (
+            <div className="bg-primary w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white mx-auto mb-8 shadow-lg rotate-3">
+              <Shield size={32} />
+            </div>
+          )}
+          <h1 className="text-4xl font-black text-ink mb-3 tracking-tighter">
+            {portalLoc ? "Hub Access" : "Welcome Back!"}
+          </h1>
+          <p className="text-slate-500 mb-10 text-sm font-medium">Log in to manage the {portalLoc ? portalLoc.city : 'CarMechs'} universe.</p>
           
           <form onSubmit={handleEmailLogin} className="space-y-6 text-left relative z-10">
             <div className="space-y-2">
@@ -694,6 +720,7 @@ export default function AdminDashboard() {
     { id: "reports", name: "Revenue Reports", icon: PieChart },
     { id: "mechanics", name: "Technicians", icon: MechanicIcon },
     { id: "services", name: "Services CMS", icon: Package },
+    { id: "variants", name: "Service Variations", icon: Layers },
     { id: "content", name: "Content CMS", icon: Layout },
     { id: "carhub", name: "Car Hub DB", icon: Car },
     { id: "tasks", name: "Internal Tasks", icon: ListTodo },
@@ -875,6 +902,7 @@ export default function AdminDashboard() {
             {activeTab === "reports" && <ReportsTab bookings={bookings} />}
             {activeTab === "mechanics" && <TechniciansTab />}
             {activeTab === "services" && <ServicesTab carData={carData} />}
+            {activeTab === "variants" && <VariantsTab carData={carData} />}
             {activeTab === "content" && <ContentTab config={config} setConfig={setConfig} />}
             {activeTab === "carhub" && <CarHubTab carData={carData} setCarData={setCarData} />}
             {activeTab === "inquiries" && <InquiriesTab inquiries={inquiries} loading={loadingInquiries} />}
@@ -1394,6 +1422,62 @@ function BookingsTab({ bookings, mechanics, loading = false }: { bookings: any[]
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto relative pb-32">
+      {/* Floating Bulk Actions Bar */}
+      <AnimatePresence>
+        {selectedBookings.length > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] w-full max-w-4xl px-4"
+          >
+            <div className="bg-neutral-900 border-2 border-primary/40 p-6 rounded-[2.5rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex items-center justify-between gap-8">
+              <div className="flex items-center gap-6">
+                <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/20 shadow-inner">
+                  <Package size={28} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white uppercase italic tracking-tight">{selectedBookings.length} Nodes Intercepted</h4>
+                  <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">Multi-vector protocol execution</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex gap-2">
+                  {["confirmed", "completed", "cancelled"].map(status => (
+                    <button 
+                      key={status}
+                      onClick={() => handleBulkAction(status)}
+                      className={cn(
+                        "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl",
+                        status === "cancelled" 
+                          ? "bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500 hover:text-white"
+                          : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white"
+                      )}
+                    >
+                      Set {status}
+                    </button>
+                  ))}
+                  <button 
+                    onClick={() => handleBulkAction("remind")}
+                    className="px-6 py-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all"
+                  >
+                    Send Reminders
+                  </button>
+                </div>
+                <div className="w-[1px] h-10 bg-white/10 mx-2" />
+                <button 
+                  onClick={() => setSelectedBookings([])}
+                  className="text-[10px] font-black text-text-dim hover:text-white uppercase tracking-widest px-4"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center bg-card-bg p-8 rounded-[2.5rem] border border-border-subtle shadow-2xl">
            <div className="flex items-center gap-5">
               <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-accent-red border border-white/5 shadow-inner relative">
@@ -1937,6 +2021,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [researching, setResearching] = useState(false);
   const [previewCar, setPreviewCar] = useState({ make: "", model: "", fuel: "Petrol", engine: "All" });
+  const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const serviceImageInputRef = useRef<HTMLInputElement>(null);
   const [newService, setNewService] = useState({ 
@@ -1947,12 +2032,15 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
     isActive: true,
     category: "Maintenance",
     icon: "Wrench",
+    duration: "",
+    requiredParts: [] as string[],
     notes: "",
     imageUrl: "",
     features: [] as string[],
     variants: [] as { make: string, model: string, fuel: string, engine?: string, price: number, description?: string }[],
     reviews: [] as any[]
   });
+  const [generatingAI, setGeneratingAI] = useState(false);
 
   const availableIcons = Object.keys(ICON_MAP);
 
@@ -2014,6 +2102,8 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
       isActive: service.isActive ?? true,
       category: service.category || "Maintenance",
       icon: service.icon || "Wrench",
+      duration: service.duration || "",
+      requiredParts: service.requiredParts || [],
       notes: service.notes || "",
       imageUrl: service.imageUrl || "",
       features: service.features || [],
@@ -2030,6 +2120,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
         ...newService, 
         price: Number(newService.price),
         features: newService.features.filter(f => f.trim() !== ""),
+        requiredParts: newService.requiredParts.filter(p => p.trim() !== ""),
         variants: newService.variants.map(v => ({ 
           ...v, 
           price: (v.price && v.price > 0) ? Number(v.price) : Number(newService.price) 
@@ -2052,7 +2143,7 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
       setNewService({ 
         title: "", excerpt: "", description: "", price: 0, isActive: true, 
         category: "Maintenance", icon: "Wrench", notes: "", imageUrl: "", 
-        features: [], variants: [], reviews: [] 
+        features: [], variants: [], reviews: [], duration: "", requiredParts: []
       });
     } catch (err) {
       console.error(err);
@@ -2079,11 +2170,46 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
     }
   };
 
+  const handleGenerateAIContent = async (target: 'description' | 'features' | 'all' = 'all') => {
+    if (!newService.title || !newService.category) {
+      toast.warning("Title and Category are required for content generation.");
+      return;
+    }
+    setGeneratingAI(true);
+    try {
+      const response = await fetch("/api/admin/generate-service-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          title: newService.title, 
+          category: newService.category,
+          target 
+        })
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      
+      setNewService(prev => ({
+        ...prev,
+        description: (target === 'all' || target === 'description') ? (data.description || prev.description) : prev.description,
+        features: (target === 'all' || target === 'features') ? (data.features && data.features.length > 0 ? data.features : prev.features) : prev.features
+      }));
+      toast.success(`AI content generated for ${target === 'all' ? 'Description & Features' : target}!`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "AI generation failed.");
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
   const filteredServices = services.filter(s => {
     const categoryMatch = filterCategories.length === 0 || filterCategories.includes(s.category);
     const statusMatch = filterStatuses.length === 0 || filterStatuses.includes(s.isActive ? "Active" : "Inactive");
     const searchMatch = robustSearch(s, searchQuery, ["title", "excerpt", "description", "id", "category", "features", "variants.make", "variants.model"]);
-    return categoryMatch && statusMatch && searchMatch;
+    const price = s.price || 0;
+    const priceMatch = price >= priceRange.min && price <= priceRange.max;
+    return categoryMatch && statusMatch && searchMatch && priceMatch;
   });
 
   const getDynamicVariant = (service: any) => {
@@ -2141,26 +2267,13 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
     }
     setResearching(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Research car service details for "${title}". 
-      Focus on deep technical data including relevant car parts, diagnostic procedures, and industry standards.
-      Provide:
-      1. A professional excerpt (max 20 words).
-      2. A detailed description of what the service involves.
-      3. A list of 5 key features or diagnostic steps included in this service.
-      4. Detailed technical notes for a mechanic, specifically mentioning required car parts, specialized tools, and diagnostic procedures.
-      Return ONLY in JSON format: { "excerpt": "...", "description": "...", "features": ["...", "..."], "notes": "..." }`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json"
-        },
+      const response = await fetch("/api/admin/research-service", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title })
       });
-
-      const data = JSON.parse(response.text || "{}");
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
       
       if (existingId) {
         await updateDoc(doc(db, "services", existingId), {
@@ -2177,13 +2290,15 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
           excerpt: data.excerpt || prev.excerpt,
           description: data.description || prev.description,
           features: Array.isArray(data.features) ? data.features : prev.features,
-          notes: data.notes || prev.notes
+          notes: data.notes || prev.notes,
+          duration: data.duration || prev.duration,
+          requiredParts: Array.isArray(data.requiredParts) ? data.requiredParts : prev.requiredParts
         }));
         toast.success("Service specs populated via Google Search Grounding.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Cloud synchronization failed. Please check network.");
+      toast.error(err.message || "Cloud synchronization failed. Please check network.");
     } finally {
       setResearching(false);
     }
@@ -2488,6 +2603,21 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                   className="w-full pl-10 pr-4 py-3 bg-black/40 border border-white/5 rounded-xl text-[11px] font-bold text-white focus:outline-none focus:border-accent-red transition-all shadow-inner placeholder:text-neutral-700 font-mono"
                 />
               </div>
+              <div className="flex items-center gap-2 bg-black/40 border border-white/5 p-1 rounded-xl">
+                 <input 
+                   type="number" 
+                   placeholder="MIN ₹" 
+                   onChange={(e) => setPriceRange(prev => ({ ...prev, min: Number(e.target.value) || 0 }))}
+                   className="w-20 bg-transparent text-[10px] font-black text-white px-2 py-1 outline-none text-right"
+                 />
+                 <span className="text-text-dim">-</span>
+                 <input 
+                   type="number" 
+                   placeholder="MAX ₹" 
+                   onChange={(e) => setPriceRange(prev => ({ ...prev, max: Number(e.target.value) || 100000 }))}
+                   className="w-20 bg-transparent text-[10px] font-black text-white px-2 py-1 outline-none text-right"
+                 />
+              </div>
               <button 
                 onClick={() => setShowFilters(!showFilters)}
                 className={cn(
@@ -2686,9 +2816,14 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                             >
                               {/* Features List */}
                               <div className="space-y-6">
-                                <h4 className="text-[10px] font-black text-accent-red uppercase tracking-[0.3em] flex items-center gap-3">
-                                  <List size={14} /> Operational Protocol
-                                </h4>
+                                <div className="flex justify-between items-center">
+                                   <h4 className="text-[10px] font-black text-accent-red uppercase tracking-[0.3em] flex items-center gap-3">
+                                     <List size={14} /> Operational Protocol
+                                   </h4>
+                                   <div className="text-[9px] font-black text-text-dim uppercase tracking-widest bg-white/5 px-3 py-1 rounded-lg border border-white/5">
+                                      {s.duration || "EST_NA"} Duration
+                                   </div>
+                                </div>
                                 {s.features && s.features.length > 0 ? (
                                   <ul className="space-y-3">
                                     {s.features.map((f: string, i: number) => (
@@ -2702,6 +2837,18 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                                   <div className="text-[10px] text-neutral-700 italic border border-white/5 p-4 rounded-xl border-dashed">
                                     No features defined for this node.
                                   </div>
+                                )}
+                                {s.requiredParts && s.requiredParts.length > 0 && (
+                                   <div className="pt-6 border-t border-white/5">
+                                      <h5 className="text-[8px] font-black text-text-dim uppercase tracking-widest mb-3">Required Artifacts/Parts</h5>
+                                      <div className="flex flex-wrap gap-2">
+                                         {s.requiredParts.map((p: string, i: number) => (
+                                            <span key={i} className="px-2 py-1 bg-white/5 border border-white/5 rounded text-[9px] font-black text-white/50 uppercase italic tracking-tighter">
+                                               {p}
+                                            </span>
+                                         ))}
+                                      </div>
+                                   </div>
                                 )}
                               </div>
 
@@ -2887,7 +3034,11 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
               <button 
                 onClick={() => {
                   setEditingId(null);
-                  setNewService({ title: "", excerpt: "", description: "", price: 0, isActive: true, category: "Maintenance", icon: "Wrench", notes: "", imageUrl: "", features: [], variants: [], reviews: [] });
+                  setNewService({ 
+                    title: "", excerpt: "", description: "", price: 0, isActive: true, 
+                    category: "Maintenance", icon: "Wrench", notes: "", imageUrl: "", 
+                    features: [], variants: [], reviews: [], duration: "", requiredParts: [] 
+                  });
                 }}
                 className="text-[10px] text-text-dim hover:text-rose-500 font-black uppercase tracking-[0.2em] transition-colors"
               >
@@ -3069,7 +3220,18 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
 
             <div className="space-y-6">
               <div className="flex items-center justify-between ml-1">
-                <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em]">Process Map (Features)</label>
+                <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] flex items-center gap-4">
+                  Process Map (Features)
+                  <button 
+                    type="button"
+                    onClick={() => handleGenerateAIContent('features')}
+                    disabled={generatingAI || !newService.title}
+                    className="flex items-center gap-2 bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded-lg border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-50"
+                  >
+                    <Sparkles size={10} />
+                    <span className="text-[8px] font-black uppercase">AI_Features</span>
+                  </button>
+                </label>
                 <button 
                   type="button"
                   onClick={addFeature}
@@ -3257,8 +3419,30 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
               </AnimatePresence>
             </div>
 
-            <div className="space-y-2.5">
-              <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] ml-1">Marketable Narrative</label>
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] flex justify-between items-center ml-1">
+                <span>Detailed Narrative</span>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => handleGenerateAIContent('description')}
+                    disabled={generatingAI || !newService.title}
+                    className="flex items-center gap-2 bg-indigo-500/10 text-indigo-400 px-3 py-1.5 rounded-xl border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-50"
+                  >
+                    <Sparkles size={12} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">AI Description</span>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => handleGenerateAIContent('all')}
+                    disabled={generatingAI || !newService.title}
+                    className="flex items-center gap-2 bg-accent-red/10 text-accent-red px-3 py-1.5 rounded-xl border border-accent-red/20 hover:bg-accent-red hover:text-white transition-all disabled:opacity-50"
+                   >
+                     {generatingAI ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                     <span className="text-[9px] font-black uppercase tracking-widest">AI Sync All</span>
+                   </button>
+                </div>
+              </label>
               <textarea 
                 required
                 value={newService.description}
@@ -3267,6 +3451,29 @@ function ServicesTab({ carData }: { carData: Record<string, { logo: string, mode
                 rows={4}
                 placeholder="High-conversion marketing summary..."
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+               <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] ml-1">Estimated Duration</label>
+                  <input 
+                    type="text" 
+                    value={newService.duration}
+                    onChange={(e) => setNewService({ ...newService, duration: e.target.value })}
+                    placeholder="e.g. 2 hrs"
+                    className="w-full text-[11px] font-black p-4 bg-black/40 border border-white/10 rounded-2xl outline-none focus:border-accent-red text-white uppercase italic shadow-inner"
+                  />
+               </div>
+               <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.25em] ml-1">Required Parts (List)</label>
+                  <input 
+                    type="text" 
+                    value={newService.requiredParts.join(", ")}
+                    onChange={(e) => setNewService({ ...newService, requiredParts: e.target.value.split(",").map(p => p.trim()).filter(p => p !== "") })}
+                    placeholder="Oil, Filter, etc."
+                    className="w-full text-[11px] font-black p-4 bg-black/40 border border-white/10 rounded-2xl outline-none focus:border-accent-red text-white uppercase italic shadow-inner"
+                  />
+               </div>
             </div>
 
             <div className="space-y-3 bg-neutral-950 p-8 rounded-[2rem] border border-white/5 shadow-2xl">
@@ -6399,12 +6606,291 @@ function SEOTab() {
   );
 }
 
+async function resetUserPassword(email: string) {
+  try {
+    const res = await fetch("/api/admin/reset-user-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast.success("Password reset link transmitted to operator email.");
+    } else {
+      toast.error(data.error || "Reset link generation failure.");
+    }
+  } catch (err) {
+    console.error(err);
+    toast.error("Security protocol failure.");
+  }
+}
+
+function VariantsTab({ carData }: { carData: any }) {
+  const [variants, setVariants] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const [newVariant, setNewVariant] = useState({
+    serviceId: "",
+    serviceName: "",
+    make: "All",
+    model: "All",
+    fuel: "All",
+    priceOverride: 0,
+    active: true
+  });
+
+  useEffect(() => {
+    // Sync services first for the dropdown
+    const unsubServices = onSnapshot(collection(db, "services"), (snap) => {
+      setServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubVariants = onSnapshot(collection(db, "serviceVariants"), (snap) => {
+      setVariants(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    });
+
+    return () => {
+      unsubServices();
+      unsubVariants();
+    };
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVariant.serviceId) return toast.error("Selection required: CORE_SERVICE");
+
+    try {
+      const selectedService = services.find(s => s.id === newVariant.serviceId);
+      const payload = {
+        ...newVariant,
+        serviceName: selectedService?.title || "",
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingId) {
+        await updateDoc(doc(db, "serviceVariants", editingId), payload);
+        toast.success("Variant parameters synchronized.");
+      } else {
+        await addDoc(collection(db, "serviceVariants"), {
+          ...payload,
+          createdAt: serverTimestamp()
+        });
+        toast.success("New variant archived to registry.");
+      }
+
+      setIsAdding(false);
+      setEditingId(null);
+      setNewVariant({ serviceId: "", serviceName: "", make: "All", model: "All", fuel: "All", priceOverride: 0, active: true });
+    } catch (err) {
+      console.error(err);
+      toast.error("Registry commit failure.");
+    }
+  };
+
+  const deleteVariant = async (id: string) => {
+    if (window.confirm("Purge this variant override?")) {
+      await deleteDoc(doc(db, "serviceVariants", id));
+      toast.info("Variant removed from system.");
+    }
+  };
+
+  const filteredVariants = variants.filter(v => 
+    robustSearch(v, search, ["serviceName", "make", "model", "fuel"])
+  );
+
+  if (loading) return <div className="p-20 text-center uppercase font-black text-text-dim text-xs animate-pulse tracking-[0.5em]">SYNCING_VARIANTS_MATRIX...</div>;
+
+  return (
+    <div className="space-y-10 max-w-6xl mx-auto pb-32">
+       <div className="bg-card-bg p-8 rounded-[2.5rem] border border-border-subtle shadow-2xl flex justify-between items-center bg-gradient-to-br from-card-bg to-black/20">
+          <div className="flex items-center gap-5">
+             <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-primary border border-white/5 shadow-inner">
+                <Layers size={28} />
+             </div>
+             <div>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white mb-0.5">Price Multipliers</h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-text-dim">Vehicle-specific financial overrides</p>
+             </div>
+          </div>
+          <div className="flex gap-4">
+             <div className="relative group">
+               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim group-focus-within:text-primary transition-colors" size={16} />
+               <input 
+                 type="text"
+                 placeholder="Search variants..."
+                 value={search}
+                 onChange={(e) => setSearch(e.target.value)}
+                 className="bg-black/40 border border-white/5 rounded-xl pl-12 pr-6 py-4 text-[10px] font-black uppercase text-white outline-none focus:border-primary transition-all w-64 shadow-inner"
+               />
+             </div>
+             <button 
+               onClick={() => { setIsAdding(!isAdding); setEditingId(null); }}
+               className="bg-primary text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center gap-3 active:scale-95 transition-all"
+             >
+               {isAdding ? <X size={20} /> : <Plus size={20} />}
+               {isAdding ? "Abort" : "Define Variant"}
+             </button>
+          </div>
+       </div>
+
+       {isAdding && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-card-bg p-10 rounded-[3rem] border border-border-subtle shadow-22">
+             <form onSubmit={handleSave} className="space-y-8">
+                <div className="grid md:grid-cols-2 gap-8">
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Core Service Node</label>
+                      <select 
+                        required
+                        value={newVariant.serviceId}
+                        onChange={e => setNewVariant({...newVariant, serviceId: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 p-4 rounded-xl text-sm font-black text-white"
+                      >
+                         <option value="">SELECT_BASE_SERVICE...</option>
+                         {services.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                      </select>
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Price Override (₹)</label>
+                      <div className="relative">
+                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-black">₹</div>
+                         <input 
+                           type="number"
+                           required
+                           value={newVariant.priceOverride}
+                           onChange={e => setNewVariant({...newVariant, priceOverride: parseInt(e.target.value)})}
+                           className="w-full bg-black/40 border border-white/10 pl-10 pr-4 py-4 rounded-xl text-sm font-black text-white"
+                         />
+                      </div>
+                   </div>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-8 pb-8">
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Vehicle Make</label>
+                      <select 
+                        value={newVariant.make}
+                        onChange={e => setNewVariant({...newVariant, make: e.target.value, model: "All"})}
+                        className="w-full bg-black/40 border border-white/10 p-4 rounded-xl text-xs font-black text-white"
+                      >
+                         <option value="All">ALL_MANUFACTURERS</option>
+                         {Object.keys(carData).map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Specific Model</label>
+                      <select 
+                        value={newVariant.model}
+                        onChange={e => setNewVariant({...newVariant, model: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 p-4 rounded-xl text-xs font-black text-white"
+                      >
+                         <option value="All">ALL_MODELS</option>
+                         {newVariant.make !== "All" && carData[newVariant.make]?.models.map((m: any) => (
+                           <option key={m.name} value={m.name}>{m.name}</option>
+                         ))}
+                      </select>
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Fuel Type</label>
+                      <select 
+                        value={newVariant.fuel}
+                        onChange={e => setNewVariant({...newVariant, fuel: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 p-4 rounded-xl text-xs font-black text-white"
+                      >
+                         <option value="All">ALL_ENERGY_TYPES</option>
+                         {["Petrol", "Diesel", "CNG", "EV", "Hybrid"].map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                   </div>
+                </div>
+
+                <button type="submit" className="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase tracking-[0.4em] hover:bg-primary hover:text-white transition-all shadow-xl">
+                   {editingId ? "Update Tactical Parameters" : "Engrave Variant Matrix"}
+                </button>
+             </form>
+          </motion.div>
+       )}
+
+       <div className="bg-card-bg rounded-[3rem] border border-border-subtle overflow-hidden shadow-2xl">
+          <div className="overflow-x-auto">
+             <table className="w-full text-left">
+                <thead>
+                   <tr className="bg-black/20 border-b border-white/5">
+                      <th className="px-8 py-6 text-[10px] font-black text-text-dim uppercase tracking-widest">Base Service</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-text-dim uppercase tracking-widest">Vehicle Filters</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-text-dim uppercase tracking-widest">Price Override</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-text-dim uppercase tracking-widest">Status</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-text-dim uppercase tracking-widest text-right">Actions</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                   {filteredVariants.map(v => (
+                      <tr key={v.id} className="hover:bg-white/5 transition-all group">
+                         <td className="px-8 py-6">
+                            <div className="font-black text-white text-xs uppercase italic">{v.serviceName}</div>
+                            <div className="text-[9px] text-text-dim uppercase mt-1 tracking-widest">Core_ID: {v.serviceId.slice(0, 8)}</div>
+                         </td>
+                         <td className="px-8 py-6">
+                            <div className="flex gap-2">
+                               <span className="px-3 py-1 bg-white/5 border border-white/5 rounded-lg text-[9px] font-black uppercase text-primary tracking-tighter">{v.make}</span>
+                               <span className="px-3 py-1 bg-white/5 border border-white/5 rounded-lg text-[9px] font-black uppercase text-white/50 tracking-tighter">{v.model}</span>
+                               <span className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-[9px] font-black uppercase text-indigo-400 tracking-tighter">{v.fuel}</span>
+                            </div>
+                         </td>
+                         <td className="px-8 py-6">
+                            <div className="text-xl font-black text-emerald-400 italic tracking-tighter">₹{v.priceOverride}</div>
+                            <div className="text-[8px] font-black uppercase text-text-dim tracking-widest mt-0.5">Tactical_Price</div>
+                         </td>
+                         <td className="px-8 py-6">
+                            <button 
+                              onClick={() => updateDoc(doc(db, "serviceVariants", v.id), { active: !v.active })}
+                              className={cn(
+                                "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all",
+                                v.active ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-neutral-800 text-neutral-600 border-neutral-700"
+                              )}
+                            >
+                               {v.active ? "ENGAGED" : "OFFLINE"}
+                            </button>
+                         </td>
+                         <td className="px-8 py-6 text-right">
+                            <div className="flex justify-end gap-3">
+                               <button 
+                                 onClick={() => {
+                                   setEditingId(v.id);
+                                   setNewVariant({ ...v });
+                                   setIsAdding(true);
+                                 }}
+                                 className="p-3 bg-white/5 rounded-xl hover:bg-white/10 text-white transition-all shadow-inner border border-white/5"
+                               >
+                                  <Edit size={14} />
+                               </button>
+                               <button 
+                                 onClick={() => deleteVariant(v.id)}
+                                 className="p-3 bg-white/5 rounded-xl hover:bg-rose-500/20 text-rose-500 transition-all shadow-inner border border-white/5 hover:border-rose-500/30"
+                               >
+                                  <Trash2 size={14} />
+                               </button>
+                            </div>
+                         </td>
+                      </tr>
+                   ))}
+                </tbody>
+             </table>
+          </div>
+       </div>
+    </div>
+  );
+}
+
 function LocationsTab() {
   const [locations, setLocations] = useState<any[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [newCity, setNewCity] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [newLoc, setNewLoc] = useState({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
+  const [newLoc, setNewLoc] = useState({ name: "", slug: "", address: "", city: "", region: "", phone: "", isActive: true });
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -6451,16 +6937,18 @@ function LocationsTab() {
         await updateDoc(doc(db, "locations", editingId), { ...newLoc, updatedAt: serverTimestamp() });
         setEditingId(null);
       } else {
-        await addDoc(collection(db, "locations"), { ...newLoc, createdAt: serverTimestamp() });
+        const finalSlug = newLoc.slug || newLoc.name.toLowerCase().replace(/\s+/g, '-');
+        await addDoc(collection(db, "locations"), { ...newLoc, slug: finalSlug, createdAt: serverTimestamp() });
       }
       setShowAdd(false);
-      setNewLoc({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
+      setNewLoc({ name: "", slug: "", address: "", city: "", region: "", phone: "", isActive: true });
     } catch (err) { console.error(err); }
   };
 
   const handleEdit = (loc: any) => {
     setNewLoc({ 
       name: loc.name, 
+      slug: loc.slug || "",
       address: loc.address || "", 
       city: loc.city || "", 
       region: loc.region || "", 
@@ -6492,7 +6980,7 @@ function LocationsTab() {
              onClick={() => {
                if (showAdd) {
                  setEditingId(null);
-                 setNewLoc({ name: "", address: "", city: "", region: "", phone: "", isActive: true });
+                 setNewLoc({ name: "", slug: "", address: "", city: "", region: "", phone: "", isActive: true });
                }
                setShowAdd(!showAdd);
              }}
@@ -6517,6 +7005,15 @@ function LocationsTab() {
                    onChange={e => setNewLoc({...newLoc, name: e.target.value})}
                    className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-primary"
                    required
+                />
+             </div>
+             <div className="space-y-2">
+                <label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Portal Slug (Unique ID)</label>
+                <input 
+                   placeholder="mumbai-central" 
+                   value={newLoc.slug}
+                   onChange={e => setNewLoc({...newLoc, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
+                   className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-primary font-mono"
                 />
              </div>
              <div className="space-y-2">
@@ -6583,7 +7080,26 @@ function LocationsTab() {
                    </div>
                 </div>
                 <h3 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">{loc.name}</h3>
-                <div className="space-y-3">
+                <div className="mb-4">
+                    <div className="text-[8px] font-black text-text-dim uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                      <LogIn size={10} className="text-primary" /> Management Portal link
+                    </div>
+                    <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 flex items-center justify-between group/link">
+                       <code className="text-[9px] font-bold text-primary truncate hover:text-white transition-colors">
+                          {window.location.origin}/admin/login/{loc.slug || loc.id}
+                       </code>
+                       <button 
+                         onClick={() => {
+                           navigator.clipboard.writeText(`${window.location.origin}/admin/login/${loc.slug || loc.id}`);
+                           toast.success("Portal link archived to clipboard.");
+                         }}
+                         className="text-text-dim hover:text-white transition-all p-1"
+                       >
+                          <Download size={14} />
+                       </button>
+                    </div>
+                 </div>
+                 <div className="space-y-3">
                    <p className="text-xs text-text-dim leading-relaxed">{loc.address}</p>
                    <div className="flex flex-wrap gap-4 text-[10px] font-black uppercase tracking-widest text-primary font-mono">
                       <span className="bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/10">{loc.city}</span>
@@ -7212,6 +7728,28 @@ function UsersTab({ locations }: { locations: any[] }) {
     }
   };
 
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  const handleResetPassword = async (email: string, id: string) => {
+    if (!window.confirm(`Initiate secure password reset protocol for ${email}?`)) return;
+    setResettingId(id);
+    try {
+      const response = await fetch("/api/admin/reset-user-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      toast.success(data.message || "Reset link dispatched.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Reset protocol failure.");
+    } finally {
+      setResettingId(null);
+    }
+  };
+
   const handleUpdateLocation = async (userId: string, locationId: string) => {
     try {
       await updateDoc(doc(db, "users", userId), {
@@ -7475,6 +8013,14 @@ function UsersTab({ locations }: { locations: any[] }) {
                      </td>
                      <td className="px-10 py-6 text-right">
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                           <button 
+                             onClick={() => handleResetPassword(u.email, u.id)}
+                             disabled={resettingId === u.id}
+                             className="w-10 h-10 rounded-xl bg-white/5 text-text-dim hover:bg-amber-500 hover:text-white transition-all flex items-center justify-center shrink-0"
+                             title="Reset Password"
+                           >
+                              {resettingId === u.id ? <Loader2 size={16} className="animate-spin" /> : <Key size={16} />}
+                           </button>
                            <button 
                              onClick={() => handleEdit(u)}
                              className="w-10 h-10 rounded-xl bg-white/5 text-text-dim hover:bg-primary hover:text-white transition-all flex items-center justify-center"

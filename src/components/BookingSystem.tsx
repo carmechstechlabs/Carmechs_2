@@ -11,6 +11,7 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   Loader2,
+  Star,
   Phone,
   Mail,
   Zap,
@@ -40,7 +41,7 @@ import { useConfig } from "../hooks/useConfig";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "react-toastify";
 import { useCart } from "../hooks/useCart";
-import { BookingFormSkeleton } from "./ui/Skeleton";
+import { BookingFormSkeleton, ServiceCardSkeleton, TechnicianSkeleton } from "./ui/Skeleton";
 import { sendConfirmationEmail, sendNewBookingAlert } from "../lib/mail";
 import { initializePayment } from "../lib/payment";
 
@@ -130,20 +131,26 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
     if (bookingData.cart.length === 0) return;
 
     const recalibratePrices = async () => {
-      // We need the service variants to recalculate
-      const serviceIds = bookingData.cart.map((item: any) => item.id);
+      setIsRefreshingPrices(true);
       const updatedCart = [...bookingData.cart];
       let hasChanged = false;
+      const newCache = { ...serviceVariantsCache };
 
-      // This is a bit expensive, but ensures accuracy.
-      // Optimization: Only update if carDetails actually changed significantly
       for (let i = 0; i < updatedCart.length; i++) {
         const item = updatedCart[i];
-        const sDoc = await getDoc(doc(db, "services", item.id));
-        if (sDoc.exists()) {
-          const service = sDoc.data();
-          const variant = getDynamicVariant(service, bookingData.carDetails);
-          const finalPrice = variant ? variant.price : service.price;
+        let serviceData = newCache[item.id];
+
+        if (!serviceData) {
+          const sDoc = await getDoc(doc(db, "services", item.id));
+          if (sDoc.exists()) {
+            serviceData = sDoc.data();
+            newCache[item.id] = serviceData;
+          }
+        }
+
+        if (serviceData) {
+          const variant = getDynamicVariant(serviceData, bookingData.carDetails);
+          const finalPrice = variant ? variant.price : serviceData.price;
           if (item.price !== finalPrice) {
             updatedCart[i] = { ...item, price: finalPrice };
             hasChanged = true;
@@ -151,15 +158,17 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
         }
       }
 
+      setServiceVariantsCache(newCache);
       if (hasChanged) {
         const total = updatedCart.reduce((acc: number, item: any) => acc + item.price, 0);
         setBookingData(prev => ({
           ...prev,
           cart: updatedCart,
           price: total,
-          serviceType: updatedCart.length > 0 ? (updatedCart.length === 1 ? updatedCart[0].title : `${updatedCart[0].title} + ${updatedCart.length - 1} more`) : prev.serviceType
+          serviceType: updatedCart.length > 0 ? (updatedCart.length === 1 ? updatedCart[0].title : `${updatedCart[0].title} + ${updatedCart.length - 1} more`) : "No Service Selected"
         }));
       }
+      setIsRefreshingPrices(false);
     };
 
     recalibratePrices();
@@ -182,9 +191,14 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
   const [technicians, setTechnicians] = useState<any[]>([]);
   const [loadingTechs, setLoadingTechs] = useState(true);
   const [userGarage, setUserGarage] = useState<any[]>([]);
+  const [serviceVariantsCache, setServiceVariantsCache] = useState<Record<string, any>>({});
+  const [aiSearchQuery, setAiSearchQuery] = useState("");
+  const [aiSearching, setAiSearching] = useState(false);
+  const [aiResults, setAiResults] = useState<any[]>([]);
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
 
   useEffect(() => {
-    // Show only available technicians as requested
+    // Specifically fetch only available technicians as requested
     const q = query(collection(db, "technicians"), where("status", "==", "available"));
     return onSnapshot(q, (snap) => {
       setTechnicians(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -198,6 +212,29 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
   const nextStep = () => setStep(prev => prev + 1);
   const backStep = () => setStep(prev => prev - 1);
   const goToStep = (s: number) => setStep(s);
+
+  const handleAiServiceSearch = async () => {
+    if (!aiSearchQuery.trim()) return;
+    setAiSearching(true);
+    try {
+      const response = await fetch("/api/ai/search-services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: aiSearchQuery,
+          carDetails: bookingData.carDetails
+        })
+      });
+      const data = await response.json();
+      if (data.results) {
+        setAiResults(data.results);
+      }
+    } catch (err) {
+      toast.error("AI Insight Node unavailable.");
+    } finally {
+      setAiSearching(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-[3rem] shadow-2xl border-4 border-white overflow-hidden max-w-4xl w-full mx-auto relative h-[85vh] flex flex-col">
@@ -277,6 +314,12 @@ export default function BookingSystem({ onClose }: { onClose?: () => void }) {
                   onBack={backStep} 
                   data={bookingData} 
                   updateData={(d) => setBookingData(prev => ({ ...prev, ...d }))} 
+                  aiResults={aiResults}
+                  setAiResults={setAiResults}
+                  aiSearchQuery={aiSearchQuery}
+                  setAiSearchQuery={setAiSearchQuery}
+                  onAiSearch={handleAiServiceSearch}
+                  aiSearching={aiSearching}
                />
              )}
              {step === 4 && (
@@ -670,34 +713,42 @@ function VehicleStep({ onNext, data, updateData, userGarage = [] }: StepProps) {
          <div className="space-y-4">
            <div className="text-[10px] font-black uppercase tracking-widest text-primary ml-1">Detected Vehicle Profiles</div>
            <div className="grid grid-cols-1 gap-3 pb-8">
-             {searchResults.slice(0, 5).map((res: any, idx: number) => (
-               <button
-                 key={`${res.brand}-${res.modelName}-${idx}`}
-                 onClick={() => {
-                   updateData({ 
-                     ...data, 
-                     make: res.brand, 
-                     brandLogo: res.brandLogo,
-                     model: res.modelName,
-                     modelLogo: res.modelLogo || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(res.modelName)}&backgroundColor=334155&fontSize=45&bold=true`
-                   });
-                   setStep(3); // Model selected, go to fuel
-                   setSearch("");
-                 }}
-                 className="flex items-center gap-6 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-primary hover:bg-white transition-all group text-left shadow-sm hover:shadow-xl"
-               >
-                 <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 p-3 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform">
-                    {res.brandLogo ? <img src={res.brandLogo} alt="" className="w-full h-full object-contain" /> : <Car size={28} className="text-slate-200" />}
-                 </div>
-                 <div className="flex-1">
-                   <div className="text-[10px] font-black uppercase text-primary tracking-[0.2em] leading-none mb-1.5">{res.brand} Series</div>
-                   <div className="text-xl font-black text-ink italic uppercase tracking-tight">{res.modelName}</div>
-                 </div>
-                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-200 group-hover:text-primary transition-all">
-                    <ChevronRight size={20} />
-                 </div>
-               </button>
-             ))}
+            {searchResults.slice(0, 5).map((res: any, idx: number) => {
+               const modelMatch = search && res.modelName.toLowerCase().includes(search.toLowerCase());
+               const brandMatch = search && res.brand.toLowerCase().includes(search.toLowerCase());
+               
+               return (
+                 <button
+                   key={`${res.brand}-${res.modelName}-${idx}`}
+                   onClick={() => {
+                     updateData({ 
+                       ...data, 
+                       make: res.brand, 
+                       brandLogo: res.brandLogo,
+                       model: res.modelName,
+                       modelLogo: res.modelLogo || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(res.modelName)}&backgroundColor=334155&fontSize=45&bold=true`
+                     });
+                     setStep(3); // Model selected, go to fuel
+                     setSearch("");
+                   }}
+                   className={cn(
+                     "flex items-center gap-6 p-5 rounded-[2rem] border-2 transition-all group text-left shadow-sm hover:shadow-xl relative overflow-hidden",
+                     (modelMatch || brandMatch) ? "border-primary/40 bg-white" : "border-slate-50 bg-slate-50 hover:border-primary hover:bg-white"
+                   )}
+                 >
+                   <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 p-3 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform">
+                      {res.brandLogo ? <img src={res.brandLogo} alt="" className="w-full h-full object-contain" /> : <Car size={28} className="text-slate-200" />}
+                   </div>
+                   <div className="flex-1">
+                     <div className={cn("text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1.5", brandMatch ? "text-primary" : "text-slate-400")}>{res.brand} Series</div>
+                     <div className={cn("text-xl font-black italic uppercase tracking-tight", modelMatch ? "text-primary" : "text-ink")}>{res.modelName}</div>
+                   </div>
+                   <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-200 group-hover:text-primary transition-all">
+                      <ChevronRight size={20} />
+                   </div>
+                 </button>
+               );
+            })}
            </div>
          </div>
        )}
@@ -981,7 +1032,18 @@ function VehicleStep({ onNext, data, updateData, userGarage = [] }: StepProps) {
   );
 }
 
-function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
+function ServiceStep({ 
+  onNext, 
+  onBack, 
+  data, 
+  updateData,
+  aiResults = [],
+  setAiResults,
+  aiSearchQuery = "",
+  setAiSearchQuery,
+  onAiSearch,
+  aiSearching = false
+}: any) {
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const cart = data.cart || [];
@@ -996,7 +1058,7 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
     });
   }, []);
 
-  if (loading) return <BookingFormSkeleton />;
+  if (loading) return <ServiceCardSkeleton count={3} />;
 
   const getDynamicVariant = (service: any) => {
     if (!data.carDetails.make || !data.carDetails.model || !data.carDetails.fuel) return null;
@@ -1074,21 +1136,103 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6"
     >
+       {/* AI Powered Search Bar */}
+       <div className="bg-slate-900 p-8 rounded-[3rem] space-y-6 border-2 border-slate-800 shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-[100px] -z-10 group-hover:bg-primary/30 transition-all duration-1000" />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-primary">
+              <Zap size={10} className="animate-pulse" />
+              <div className="text-[10px] font-black uppercase tracking-[0.3em]">AI-Powered Service Insight</div>
+            </div>
+            <h3 className="text-xl font-black text-white italic uppercase tracking-tighter">Describe Vehicle Symptom</h3>
+          </div>
+          <div className="relative">
+            <input 
+              type="text"
+              placeholder="e.g. 'Engine check light is on' or 'vibration at high speeds'..."
+              value={aiSearchQuery}
+              onChange={(e) => setAiSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onAiSearch()}
+              className="w-full bg-slate-800/50 border-2 border-slate-700/50 rounded-2xl px-6 py-4 text-white text-xs font-bold outline-none focus:border-primary transition-all pr-32"
+            />
+            <button 
+              onClick={onAiSearch}
+              disabled={aiSearching || !aiSearchQuery.trim()}
+              className="absolute right-2 top-2 bottom-2 bg-primary text-white px-6 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center gap-2 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {aiSearching ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+              Analyze
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {aiResults.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="space-y-4 pt-4 border-t border-slate-800"
+              >
+                <div className="flex justify-between items-center">
+                  <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Matched Operational Protocols</div>
+                  <button onClick={() => setAiResults([])} className="text-[9px] font-black text-slate-500 uppercase hover:text-white">Clear</button>
+                </div>
+                <div className="grid gap-2">
+                   {aiResults.map(s => {
+                     const isSelected = cart.find((item: any) => item.id === s.id);
+                     return (
+                       <button 
+                         key={`ai-${s.id}`}
+                         onClick={() => toggleService(s)}
+                         className={cn(
+                           "flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left group",
+                           isSelected ? "bg-emerald-500 border-emerald-400 text-white" : "bg-slate-800/80 border-slate-700 text-slate-300 hover:border-emerald-500"
+                         )}
+                       >
+                         <div className="flex items-center gap-3">
+                           <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isSelected ? "bg-white/20" : "bg-slate-700")}>
+                             <Wrench size={14} />
+                           </div>
+                           <div>
+                             <div className="text-[11px] font-black uppercase tracking-tight">{s.title}</div>
+                             <div className={cn("text-[8px] font-bold opacity-60", isSelected ? "text-white" : "text-emerald-400")}>98% Tactical Match</div>
+                           </div>
+                         </div>
+                         <div className={cn("w-5 h-5 rounded-md flex items-center justify-center border-2", isSelected ? "bg-white border-white text-emerald-500" : "border-slate-600 text-transparent")}>
+                           <Check size={12} strokeWidth={4} />
+                         </div>
+                       </button>
+                     );
+                   })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+       </div>
+
+       <div className="flex items-center gap-4 py-4 px-2">
+          <div className="h-px bg-slate-100 flex-1" />
+          <div className="text-[9px] font-black text-slate-300 uppercase tracking-[0.4em]">Tactical Catalog</div>
+          <div className="h-px bg-slate-100 flex-1" />
+       </div>
+
        <div className="grid gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
           {services.map(s => {
             const variant = getDynamicVariant(s);
             const finalPrice = variant ? variant.price : s.price;
             const isSelected = cart.find((item: any) => item.id === s.id);
-                       return (
+            const hasVariants = s.variants && s.variants.length > 0;
+
+            return (
               <div key={s.id} className="space-y-2">
                 <button 
                   onClick={() => toggleService(s)}
                   className={cn(
-                    "w-full p-6 rounded-3xl border-2 text-left flex items-center justify-between transition-all group",
-                    isSelected ? "border-primary bg-primary-soft ring-2 ring-primary/20" : "border-slate-50 bg-slate-50 hover:border-slate-200"
+                    "w-full p-6 rounded-3xl border-2 text-left flex items-center justify-between transition-all group relative overflow-hidden",
+                    isSelected ? "border-primary bg-primary-soft ring-2 ring-primary/20 scale-[1.01]" : "border-slate-50 bg-slate-50 hover:border-slate-200"
                   )}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 relative z-10">
                     <div className={cn(
                       "w-12 h-12 rounded-xl flex items-center justify-center shadow-sm group-hover:rotate-6 transition-all",
                       isSelected ? "bg-primary text-white" : "bg-white text-primary"
@@ -1099,22 +1243,33 @@ function ServiceStep({ onNext, onBack, data, updateData }: StepProps) {
                       <div className="font-black text-ink uppercase tracking-tight">{s.title}</div>
                       <div className="flex items-center gap-2">
                         <div className={cn("text-[10px] font-bold uppercase tracking-widest", variant || isSelected ? "text-primary" : "text-slate-400")}>
-                          {variant ? `Vehicle Price Applied: ₹${finalPrice}` : `Generic Price Applied: ₹${s.price}`}
+                          {variant ? `Vehicle Price Applied: ₹${finalPrice}` : hasVariants ? `Starting from ₹${s.price}` : `Legacy Price: ₹${s.price}`}
                         </div>
                         {variant ? (
                           <Zap size={10} className="text-primary animate-pulse" />
+                        ) : hasVariants ? (
+                          <div className="bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter">Variations Available</div>
                         ) : (
-                          <div className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter">Default Fallback</div>
+                          <div className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter">Static Spec</div>
                         )}
                       </div>
                     </div>
                   </div>
                   <div className={cn(
-                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
-                    isSelected ? "bg-primary border-primary text-white" : "border-slate-200 text-transparent"
+                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all relative z-10",
+                    isSelected ? "bg-primary border-primary text-white scale-110" : "border-slate-200 text-transparent"
                   )}>
                     <Check size={14} strokeWidth={3} />
                   </div>
+
+                  {isSelected && (
+                    <motion.div 
+                      layoutId={`item-glow-${s.id}`}
+                      className="absolute inset-0 bg-primary/5 -z-10"
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                    />
+                  )}
                 </button>
                 {/* Variant Selector */}
                 {s.variants && s.variants.length > 0 && isSelected && (
@@ -1216,37 +1371,38 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
     return d;
   });
 
-  const generateTimes = () => {
-    const times = [];
-    for (let hour = 9; hour <= 18; hour++) {
-      for (let min of ["00", "30"]) {
-        if (hour === 18 && min === "30") break;
-        const h = hour > 12 ? hour - 12 : hour;
-        const ampm = hour >= 12 ? "PM" : "AM";
-        times.push(`${h.toString().padStart(2, '0')}:${min} ${ampm}`);
-      }
-    }
-    return times;
-  };
-
-  const times = generateTimes();
+  const times = [
+    "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+    "12:00 PM", "12:30 PM", "01:00 PM", "01:30 PM", "02:00 PM", "02:30 PM",
+    "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM", "05:00 PM", "05:30 PM"
+  ];
 
   useEffect(() => {
-    if (!data.appointmentDate) return;
+    if (!data.appointmentDate || !auth.currentUser) return;
     
-    // We fetch bookings for the day. 
-    // If a mechanic is selected, we filter by that mechanic to show THEIR availability.
-    // If no mechanic is selected, we show all bookings to give a general sense of occupancy, 
-    // or we could show slots as "busy" only if ALL mechanics are booked (but that's harder without knowing total mechanics).
-    // For now, let's filter specifically if a mechanic is chosen.
-    const q = selectedMechanic 
-      ? query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate), where("mechanicId", "==", selectedMechanic.id))
-      : query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate));
+    // Fetch all bookings for the day to check global occupancy
+    const q = query(collection(db, "bookings"), where("appointmentDate", "==", data.appointmentDate));
 
-    return onSnapshot(q, (snap) => {
-      setBookedSlots(snap.docs.map(doc => doc.data().appointmentTime));
+    const unsub = onSnapshot(q, (snap) => {
+      const allBookings = snap.docs.map(doc => doc.data());
+      // Create a map of mechanicId -> array of booked times
+      const occupancy: Record<string, string[]> = {};
+      allBookings.forEach(b => {
+        if (b.mechanicId) {
+          occupancy[b.mechanicId] = [...(occupancy[b.mechanicId] || []), b.appointmentTime];
+        }
+      });
+      
+      setBookedSlots(allBookings.map(b => b.appointmentTime));
+      
+      // Filter mechanics based on availability at the selected time if time is chosen
+      // Also filter by location if applicable (not yet implemented fully)
+    }, (err) => {
+      console.warn("Availability sync restricted:", err.message);
     });
-  }, [data.appointmentDate, selectedMechanic]);
+
+    return () => unsub();
+  }, [data.appointmentDate, auth.currentUser]);
 
   useEffect(() => {
     // Specifically fetch only available technicians as requested
@@ -1291,6 +1447,37 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
 
     return slotTime >= start && slotTime < end;
   };
+
+  const isSlotAvailableForTech = (time: string, tech: any) => {
+    if (!tech) return false;
+    const slotKey = `${data.appointmentDate}|${time}`;
+    
+    // Check custom unavailability
+    if (tech.unavailableSlots?.includes(slotKey)) return false;
+
+    // Check working hours
+    const convertToNumber = (t: string) => {
+      let [hmin, ampm] = t.split(' ');
+      let [h, min] = hmin.split(':').map(Number);
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return h + (min/60);
+    };
+
+    const slotVal = convertToNumber(time);
+    const startVal = tech.workingHours?.start ? parseInt(tech.workingHours.start) : 9;
+    const endVal = tech.workingHours?.end ? parseInt(tech.workingHours.end) : 18;
+
+    return slotVal >= startVal && slotVal < endVal;
+  };
+
+  // Filter mechanics visually in the list
+  const filteredMechanics = mechanics.filter(m => {
+    if (!data.appointmentTime) return true;
+    return isSlotAvailableForTech(data.appointmentTime, m);
+  });
+
+  if (loadingMechanics) return <TechnicianSkeleton count={2} />;
 
   return (
     <motion.div 
@@ -1541,10 +1728,51 @@ function ScheduleStep({ onNext, onBack, data, updateData }: StepProps) {
 
 function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
   const [bookingId, setBookingId] = useState("");
+  const [rating, setRating] = useState(0);
+  const [feedback, setFeedback] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
+  const { user } = useAuth();
   
   useEffect(() => {
     setBookingId(data.id?.slice(0, 8).toUpperCase() || "B" + Math.random().toString(36).substring(2, 10).toUpperCase());
   }, [data.id]);
+
+  const submitReview = async () => {
+    if (rating === 0) {
+      toast.warn("Please select a rating for your tactical feedback.");
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      // Find the primary service ID from the cart if available
+      const serviceId = data.cart?.[0]?.id || data.serviceType?.toLowerCase().replace(/\s+/g, '-');
+      
+      const response = await fetch(`/api/services/${serviceId}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rating,
+          feedback,
+          userId: user?.uid,
+          userName: user?.displayName || data.fullName,
+          bookingId: data.id
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Review synchronized with Intelligence Hub.");
+        setReviewed(true);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (err) {
+      toast.error("Failed to uplink review. Connection unstable.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const addToCalendar = () => {
     const title = `Carmechs: ${data.serviceType} Deployment`;
@@ -1689,7 +1917,51 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
           </motion.div>
        </div>
 
-       <div className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto px-4 h-20">
+       <div className="flex flex-col gap-6 max-w-xl mx-auto px-4">
+         {!reviewed ? (
+           <div className="bg-white/80 backdrop-blur-xl p-8 rounded-[3rem] border-2 border-slate-100 shadow-2xl space-y-6">
+             <div className="space-y-1 text-center">
+               <div className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Intelligence Report</div>
+               <h3 className="text-xl font-black text-ink uppercase italic tracking-tighter">Rate Deployment Experience</h3>
+             </div>
+             
+             <div className="flex justify-center gap-3">
+               {[1, 2, 3, 4, 5].map((star) => (
+                 <button 
+                   key={star}
+                   onClick={() => setRating(star)}
+                   className={cn(
+                     "transition-all transform hover:scale-125 active:scale-90",
+                     rating >= star ? "text-amber-400 drop-shadow-lg" : "text-slate-200"
+                   )}
+                 >
+                   <Star size={32} fill={rating >= star ? "currentColor" : "none"} strokeWidth={rating >= star ? 0 : 2} />
+                 </button>
+               ))}
+             </div>
+
+             <textarea 
+               placeholder="Share operational feedback..."
+               value={feedback}
+               onChange={(e) => setFeedback(e.target.value)}
+               className="w-full bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-6 py-4 text-xs font-black uppercase tracking-tight outline-none focus:border-primary transition-all resize-none h-24"
+             />
+
+             <button 
+               onClick={submitReview}
+               disabled={submittingReview || rating === 0}
+               className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:bg-primary transition-all flex items-center justify-center gap-3"
+             >
+               {submittingReview ? "UPLINKING..." : "SUBMIT TACTICAL REVIEW"}
+             </button>
+           </div>
+         ) : (
+           <div className="bg-emerald-500 p-8 rounded-[3rem] shadow-2xl shadow-emerald-200 flex flex-col items-center justify-center gap-3 text-white">
+             <CheckCircle2 size={24} />
+             <div className="text-[10px] font-black uppercase tracking-[0.3em] italic">Intelligence Logged</div>
+           </div>
+         )}
+         <div className="flex flex-col sm:flex-row gap-4 h-20">
           <button 
             onClick={addToCalendar}
             className="flex-1 py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-4 group hover:scale-[1.02] active:scale-[0.98]"
@@ -1704,7 +1976,8 @@ function SuccessStep({ data, onClose }: { data: any, onClose: () => void }) {
             Mission Complete
             <CheckCircle2 size={18} className="text-emerald-400" />
           </button>
-       </div>
+        </div>
+      </div>
     </motion.div>
   );
 }

@@ -13,9 +13,12 @@ import {
   MapPin,
   Star,
   ChevronRight,
-  Menu
+  Menu,
+  Trash2,
+  Package
 } from 'lucide-react';
 import { db } from '../lib/firebase';
+import { toast } from 'react-toastify';
 import { 
   collection, 
   query, 
@@ -72,11 +75,18 @@ export default function MechanicDashboard() {
       }));
     });
 
-    const availableQuery = query(
-      collection(db, "bookings"), 
-      where("status", "in", ["pending", "confirmed"]),
-      where("mechanicId", "==", "")
-    );
+    const availableQuery = techProfile?.locationId && techProfile.locationId !== "all"
+      ? query(
+          collection(db, "bookings"), 
+          where("status", "in", ["pending", "confirmed"]),
+          where("mechanicId", "==", ""),
+          where("locationId", "==", techProfile.locationId)
+        )
+      : query(
+          collection(db, "bookings"), 
+          where("status", "in", ["pending", "confirmed"]),
+          where("mechanicId", "==", "")
+        );
     const unsubAvailable = onSnapshot(availableQuery, (snap) => {
       const bData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAvailableBookings(bData);
@@ -259,7 +269,9 @@ export default function MechanicDashboard() {
 function ScheduleSection({ techProfile }: { techProfile: any }) {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [unavailableSlots, setUnavailableSlots] = useState<string[]>(techProfile.unavailableSlots || []);
+  const [blockedDateRanges, setBlockedDateRanges] = useState<any[]>(techProfile.blockedDateRanges || []);
   const [saving, setSaving] = useState(false);
+  const [newRange, setNewRange] = useState({ start: "", end: "", label: "OFFLINE" });
 
   const dates = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(offset => {
     const d = new Date();
@@ -282,6 +294,21 @@ function ScheduleSection({ techProfile }: { techProfile: any }) {
 
   const times = generateTimes();
 
+  const syncProfile = async (updates: any) => {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "technicians", techProfile.id), {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to sync profile:", err);
+      toast.error("Relational sync failure.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleSlot = async (time: string) => {
     const slotKey = `${selectedDate}|${time}`;
     let newSlots;
@@ -292,17 +319,37 @@ function ScheduleSection({ techProfile }: { techProfile: any }) {
     }
     
     setUnavailableSlots(newSlots);
-    setSaving(true);
-    try {
-      await updateDoc(doc(db, "technicians", techProfile.id), {
-        unavailableSlots: newSlots,
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.error("Failed to sync availability:", err);
-    } finally {
-      setSaving(false);
-    }
+    await syncProfile({ unavailableSlots: newSlots });
+  };
+
+  const addBlockedRange = async () => {
+    if (!newRange.start || !newRange.end) return;
+    const updated = [...blockedDateRanges, newRange];
+    setBlockedDateRanges(updated);
+    await syncProfile({ blockedDateRanges: updated });
+    setNewRange({ start: "", end: "", label: "OFFLINE" });
+  };
+
+  const removeBlockedRange = async (idx: number) => {
+    const updated = blockedDateRanges.filter((_, i) => i !== idx);
+    setBlockedDateRanges(updated);
+    await syncProfile({ blockedDateRanges: updated });
+  };
+
+  const blockFullDay = async () => {
+    const range = { start: selectedDate, end: selectedDate, label: "FULL DAY BLOCK" };
+    const updated = [...blockedDateRanges, range];
+    setBlockedDateRanges(updated);
+    await syncProfile({ blockedDateRanges: updated });
+  };
+
+  const isDayBlocked = (dateStr: string) => {
+    return blockedDateRanges.some(r => {
+      const d = new Date(dateStr);
+      const s = new Date(r.start);
+      const e = new Date(r.end);
+      return d >= s && d <= e;
+    });
   };
 
   return (
@@ -354,7 +401,12 @@ function ScheduleSection({ techProfile }: { techProfile: any }) {
                     {d.toLocaleDateString('en-US', { weekday: 'short' })}
                   </div>
                   <div className="text-2xl font-black italic leading-none">{d.getDate()}</div>
-                  {unavailableCount > 0 && !isSelected && (
+                  {isDayBlocked(dateStr) && (
+                    <div className="absolute inset-0 bg-rose-500/20 backdrop-blur-[1px] rounded-[2.5rem] flex items-center justify-center">
+                       <X size={24} className="text-rose-500" />
+                    </div>
+                  )}
+                  {unavailableCount > 0 && !isSelected && !isDayBlocked(dateStr) && (
                     <div className="absolute top-4 right-4 flex items-center gap-1">
                        <span className="text-[8px] font-black text-accent-red">{unavailableCount}</span>
                        <div className="w-1.5 h-1.5 rounded-full bg-accent-red animate-pulse" />
@@ -363,6 +415,63 @@ function ScheduleSection({ techProfile }: { techProfile: any }) {
                 </button>
               );
             })}
+          </div>
+          <div className="bg-neutral-900 border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+             <div className="text-[10px] font-black text-rose-500 uppercase tracking-widest italic flex items-center gap-2">
+                <Clock size={14} />
+                Global Blackout Control
+             </div>
+             <div className="space-y-4">
+                <button 
+                  onClick={blockFullDay}
+                  disabled={isDayBlocked(selectedDate)}
+                  className="w-full py-4 bg-rose-500 hover:bg-rose-600 disabled:bg-neutral-800 disabled:text-text-dim rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  {isDayBlocked(selectedDate) ? "DAY_ALREADY_BLACKED_OUT" : "BLOCK FULL OPERATIONAL DAY"}
+                </button>
+                <div className="h-[1px] bg-white/5" />
+                <div className="grid grid-cols-2 gap-2">
+                   <div className="space-y-1">
+                      <label className="text-[8px] font-black text-text-dim uppercase tracking-widest">Start Epoch</label>
+                      <input 
+                        type="date" 
+                        value={newRange.start}
+                        onChange={(e) => setNewRange({...newRange, start: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-[10px] font-black text-white outline-none"
+                      />
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[8px] font-black text-text-dim uppercase tracking-widest">End Epoch</label>
+                      <input 
+                        type="date" 
+                        value={newRange.end}
+                        onChange={(e) => setNewRange({...newRange, end: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-[10px] font-black text-white outline-none"
+                      />
+                   </div>
+                </div>
+                <button 
+                  onClick={addBlockedRange}
+                  disabled={!newRange.start || !newRange.end}
+                  className="w-full py-4 bg-white text-black hover:bg-accent-red hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  COMMIT BLACKOUT RANGE
+                </button>
+             </div>
+
+             <div className="space-y-3 pt-4 max-h-[200px] overflow-y-auto">
+                {blockedDateRanges.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5 group">
+                     <div>
+                        <div className="text-[9px] font-black text-rose-500 uppercase tracking-widest">{r.label}</div>
+                        <div className="text-[10px] font-mono text-text-dim">{r.start} / {r.end}</div>
+                     </div>
+                     <button onClick={() => removeBlockedRange(i)} className="text-text-dim hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
+                        <Trash2 size={14} />
+                     </button>
+                  </div>
+                ))}
+             </div>
           </div>
         </div>
 
