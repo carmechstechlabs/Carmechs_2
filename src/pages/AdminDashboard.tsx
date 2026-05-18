@@ -733,6 +733,7 @@ export default function AdminDashboard() {
     { id: "locations", name: "Location Control", icon: Globe },
     { id: "inquiries", name: "Support Inquiries", icon: MessageSquare },
     { id: "integrations", name: "API Integrations", icon: Zap },
+    { id: "secrets", name: "Security Vault", icon: Key },
     { id: "settings", name: "Settings", icon: Settings },
   ];
 
@@ -912,6 +913,7 @@ export default function AdminDashboard() {
             { activeTab === "referrals" && <ReferralsTab /> }
             { activeTab === "locations" && <LocationsTab /> }
             { activeTab === "integrations" && <IntegrationsTab /> }
+            { activeTab === "secrets" && <SecretsTab /> }
             { activeTab === "customers" && <UsersTab locations={locations} /> }
             { activeTab === "fleet" && <FleetControlTab bookings={bookings} technicians={mechanics} /> }
             { activeTab === "marketing" && <MarketingTab /> }
@@ -8711,6 +8713,143 @@ function BlogManager() {
              </div>
           ))}
        </div>
+    </div>
+  );
+}
+
+function SecretsTab() {
+  const [secrets, setSecrets] = useState<Record<string, string>>({
+    GEMINI_API_KEY: "",
+    RAZORPAY_SECRET: "",
+    PAYTM_MERCHANT_KEY: "",
+    RESEND_API_KEY: "",
+    CLOUDINARY_URL: "",
+    TWILIO_AUTH_TOKEN: ""
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showValues, setShowValues] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    async function loadSecrets() {
+      try {
+        const snap = await getDoc(doc(db, "config", "secrets"));
+        if (snap.exists()) {
+          setSecrets(prev => ({
+            ...prev,
+            ...(snap.data() as Record<string, string>)
+          }));
+        }
+      } catch (err) {
+        console.error("Vault access failure:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSecrets();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "config", "secrets"), {
+        ...secrets,
+        updatedAt: serverTimestamp()
+      });
+      toast.success("Security vault synchronized and sealed.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Vault synchronization protocol failure.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleVisibility = (key: string) => {
+    setShowValues(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  if (loading) return (
+    <div className="space-y-8 max-w-4xl">
+      <Skeleton className="h-20 w-full rounded-3xl" />
+      <div className="space-y-6">
+        <Skeleton className="h-40 w-full rounded-3xl" />
+        <Skeleton className="h-40 w-full rounded-3xl" />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-12 max-w-4xl pb-20">
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+        <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase flex items-center gap-4">
+          <Key className="text-secondary" /> Security <span className="text-secondary">Vault</span>
+        </h2>
+        <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">Manage environment-level secrets and sensitive API credentials</p>
+      </motion.div>
+
+      <div className="bg-card-bg p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-10">
+        <div className="grid gap-10">
+          {Object.keys(secrets).filter(k => k !== 'updatedAt').map(key => (
+             <div key={key} className="space-y-3 group">
+               <div className="flex justify-between items-center px-1">
+                 <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em] flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-secondary" />
+                   {key.replace(/_/g, ' ')}
+                 </label>
+                 <button 
+                  onClick={() => toggleVisibility(key)}
+                  className="text-[9px] font-black text-white/40 uppercase hover:text-white transition-colors"
+                 >
+                   {showValues[key] ? "Hide Data" : "Reveal Data"}
+                 </button>
+               </div>
+               <div className="relative">
+                 <input 
+                   type={showValues[key] ? "text" : "password"}
+                   value={secrets[key] || ""}
+                   onChange={e => setSecrets({...secrets, [key]: e.target.value})}
+                   placeholder={`Enter ${key}...`}
+                   className="w-full bg-black/60 border border-white/10 rounded-2xl p-6 text-sm font-mono text-white focus:border-secondary transition-all pr-14 placeholder:text-white/10"
+                 />
+                 <div className="absolute right-6 top-1/2 -translate-y-1/2">
+                    <ShieldCheck size={20} className={secrets[key] ? "text-emerald-500 opacity-40" : "text-white/5"} />
+                 </div>
+               </div>
+             </div>
+          ))}
+        </div>
+
+        <div className="pt-6">
+          <button 
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-white text-black py-6 rounded-2xl font-black text-xs uppercase tracking-[0.4em] hover:bg-secondary hover:text-white transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+            {saving ? "SEALING VAULT..." : "COMMIT TO CORE SYSTEM"}
+          </button>
+        </div>
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="bg-rose-500/5 border border-rose-500/10 p-10 rounded-[2.5rem] flex items-start gap-8"
+      >
+         <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500 shrink-0 border border-rose-500/20">
+            <ShieldAlert size={28} />
+         </div>
+         <div>
+            <h4 className="text-sm font-black text-white uppercase tracking-widest italic">Security Advisory: Vault Protocol</h4>
+            <p className="text-[11px] text-text-dim mt-3 leading-loose font-medium opacity-80">
+              These credentials provide root-level access to external services. Ensure all entries are current and validated. 
+              Incorrect secrets may result in system-wide service degradation or transactional failures. 
+              Values are synchronized with the cloud state and will be applied to the primary operational layer.
+            </p>
+         </div>
+      </motion.div>
     </div>
   );
 }

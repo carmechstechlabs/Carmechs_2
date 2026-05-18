@@ -7,6 +7,7 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import cron from "node-cron";
 import fs from "fs";
 import { GoogleGenAI } from "@google/genai";
@@ -31,40 +32,53 @@ try {
 }
 
 // Initialize Firebase Admin
-if (admin.apps.length === 0) {
-  if (firebaseConfig.projectId) {
-    admin.initializeApp({
-      projectId: firebaseConfig.projectId
-    });
-    console.log("[FIREBASE] Admin SDK initialized with explicit project index:", firebaseConfig.projectId);
-  } else {
-    admin.initializeApp();
-    console.warn("[FIREBASE] Admin SDK initialized with ADC (no projectId in config)");
+try {
+  if (admin.apps.length === 0) {
+    if (firebaseConfig.projectId) {
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId
+      });
+      console.log("[FIREBASE] Admin SDK initialized with explicit project ID:", firebaseConfig.projectId);
+    } else {
+      admin.initializeApp();
+      console.warn("[FIREBASE] Admin SDK initialized with Application Default Credentials");
+    }
   }
+} catch (err) {
+  console.error("[FIREBASE] Admin initialization failed:", err);
 }
 
 // Ensure dbAdmin targets the correct database if provided
-const dbAdmin = firebaseConfig.firestoreDatabaseId 
-  ? admin.firestore(firebaseConfig.firestoreDatabaseId)
-  : admin.firestore();
+const dbAdmin = firebaseConfig.firestoreDatabaseId
+  ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId)
+  : getFirestore();
+
+async function getSecretsConfig() {
+  try {
+    const snap = await dbAdmin.collection("config").doc("secrets").get();
+    return snap.exists ? snap.data() : {};
+  } catch (err) {
+    console.error("Failed to fetch secrets from Firestore:", err);
+    return {};
+  }
+}
 
 // AI search lazy initialization
 let aiClient: GoogleGenAI | null = null;
-function getAI() {
+async function getAI() {
   if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
+    const secrets = await getSecretsConfig();
+    const key = process.env.GEMINI_API_KEY || (secrets as any).GEMINI_API_KEY;
     if (!key) {
-      console.warn("GEMINI_API_KEY missing. AI features will be degraded.");
+      console.warn("GEMINI_API_KEY missing in both ENV and Firestore. AI features will be degraded.");
       return null;
     }
-    aiClient = new (GoogleGenAI as any)({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
+    try {
+      aiClient = new GoogleGenAI({ apiKey: key });
+    } catch (err) {
+      console.error("Failed to initialize GoogleGenAI:", err);
+      return null;
+    }
   }
   return aiClient;
 }
@@ -235,11 +249,12 @@ async function getSystemConfig() {
 // Lazy initialization for Razorpay
 async function getRazorpay() {
   const config = await getSystemConfig() as any;
+  const secrets = await getSecretsConfig() as any;
   const key_id = process.env.RAZORPAY_KEY_ID || config.razorpayKeyId;
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || config.razorpayKeySecret;
+  const key_secret = process.env.RAZORPAY_KEY_SECRET || config.razorpayKeySecret || secrets.RAZORPAY_SECRET;
   
   if (!key_id || !key_secret) {
-    console.warn("RAZORPAY keys missing in both ENV and Firestore. Mock mode active.");
+    console.warn("RAZORPAY keys missing in ENV, System Config, and Secrets Vault. Mock mode active.");
     return null;
   }
   return new Razorpay({ key_id, key_secret });
@@ -287,6 +302,7 @@ async function startServer() {
   app.post("/api/payment/order", async (req, res) => {
     const { amount, currency, receipt, method } = req.body;
     const sysConfig = await getSystemConfig() as any;
+    const secrets = await getSecretsConfig() as any;
 
     if (method === "paytm") {
        const mid = process.env.PAYTM_MID || sysConfig.paytmMid;
@@ -327,10 +343,11 @@ async function startServer() {
   app.post("/api/payment/verify", async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     const config = await getSystemConfig() as any;
-    const secret = process.env.RAZORPAY_KEY_SECRET || config.razorpayKeySecret;
+    const secrets = await getSecretsConfig() as any;
+    const secret = process.env.RAZORPAY_KEY_SECRET || config.razorpayKeySecret || secrets.RAZORPAY_SECRET;
 
     if (!secret) {
-      console.log("Mock verification: Signature verifcation skipped (no secret)");
+      console.log("Mock verification: Signature verifcation skipped (no secret in Vault, System Config or ENV)");
       return res.json({ status: "success", mock: true });
     }
 
@@ -371,7 +388,7 @@ async function startServer() {
          Format: ["service-id-1", "service-id-2"]
        `;
 
-       const ai = getAI();
+       const ai = await getAI();
        if (!ai) return res.status(503).json({ error: "AI Engine Offline" });
        
        const aiResult = await ai.models.generateContent({
@@ -415,7 +432,7 @@ async function startServer() {
         }
       `;
 
-      const ai = getAI();
+      const ai = await getAI();
       if (!ai) return res.status(503).json({ error: "AI Content Engine Offline" });
 
       const result = await ai.models.generateContent({
@@ -440,7 +457,7 @@ async function startServer() {
     if (!title) return res.status(400).json({ error: "Title required for diagnostic research." });
 
     try {
-      const ai = getAI();
+      const ai = await getAI();
       if (!ai) return res.status(503).json({ error: "AI Engine Offline" });
 
       const prompt = `Research car service details for "${title}". 
@@ -901,4 +918,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("CRITICAL: Server failed to start:", err);
+  process.exit(1);
+});
