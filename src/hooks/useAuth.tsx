@@ -27,40 +27,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Listen to Firestore user document
-        const unsubscribeUser = onSnapshot(doc(db, "users", firebaseUser.uid), async (docSnap) => {
-          if (docSnap.exists()) {
-            const userData = docSnap.data() as UserProfile;
-            setUser({
-              ...userData,
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              photoURL: firebaseUser.photoURL
-            });
-          } else {
-            // New user detection - should be handled by a sign-up function 
-            // but we'll put a fallback here for social logins
-            const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const newUser: UserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              fullName: firebaseUser.displayName || "",
-              role: 'customer',
-              referralCode,
-              bonusBalance: 0,
-              createdAt: new Date(),
-              photoURL: firebaseUser.photoURL,
-              profileCompleted: false
-            };
-            setUser(newUser);
-          }
-          setLoading(false);
-        }, (err) => {
-          handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
-          setLoading(false);
-        });
+        let userDocData: Partial<UserProfile> | null = null;
+        let adminDocRole: string | null = null;
+        let userLoaded = false;
+        let adminLoaded = false;
 
-        return () => unsubscribeUser();
+        const updateAuthState = () => {
+          if (!userLoaded || !adminLoaded) return;
+
+          const effectiveRole =
+            adminDocRole ||
+            userDocData?.role ||
+            (firebaseUser.email === "carmechstechlabs@gmail.com" ? "super_admin" : "customer");
+
+          const referralCode =
+            userDocData?.referralCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+
+          const mergedUser: UserProfile = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            fullName: userDocData?.fullName || firebaseUser.displayName || "",
+            role: effectiveRole as UserProfile["role"],
+            referralCode,
+            bonusBalance: userDocData?.bonusBalance || 0,
+            createdAt: userDocData?.createdAt || new Date(),
+            photoURL: firebaseUser.photoURL,
+            profileCompleted: userDocData?.profileCompleted ?? false,
+            ...(userDocData as any),
+          };
+
+          setUser(mergedUser);
+          setLoading(false);
+        };
+
+        const unsubscribeUser = onSnapshot(
+          doc(db, "users", firebaseUser.uid),
+          (docSnap) => {
+            if (docSnap.exists()) {
+              userDocData = docSnap.data() as UserProfile;
+            } else {
+              userDocData = null;
+            }
+            userLoaded = true;
+            updateAuthState();
+          },
+          (err) => {
+            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+            userLoaded = true;
+            updateAuthState();
+          }
+        );
+
+        const unsubscribeAdmin = onSnapshot(
+          doc(db, "admins", firebaseUser.uid),
+          (docSnap) => {
+            adminDocRole = docSnap.exists() ? (docSnap.data().role as string) : null;
+            adminLoaded = true;
+            updateAuthState();
+          },
+          () => {
+            adminLoaded = true;
+            updateAuthState();
+          }
+        );
+
+        return () => {
+          unsubscribeUser();
+          unsubscribeAdmin();
+        };
       } else {
         setUser(null);
         setLoading(false);

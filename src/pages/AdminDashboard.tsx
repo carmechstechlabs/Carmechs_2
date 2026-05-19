@@ -88,7 +88,6 @@ import { cn } from "../lib/utils";
 import { db, auth } from "../lib/firebase";
 import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, Timestamp, setDoc, addDoc, deleteDoc, serverTimestamp, getDoc, getDocs, increment } from "firebase/firestore";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { useConfig } from "../hooks/useConfig";
 import { refundPayment } from "../lib/payment";
 import { sendTaskNotification, sendStatusUpdateEmail, sendBookingReminder } from "../lib/mail";
 import { toast } from "react-toastify";
@@ -158,6 +157,7 @@ export default function AdminDashboard() {
 
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [adminProfileLoading, setAdminProfileLoading] = useState(false);
 
   useEffect(() => {
     if (isAdminCheck() && bookings.length > 0) {
@@ -192,30 +192,57 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (user) {
+      setAdminProfileLoading(true);
       const checkAdminDoc = async () => {
-        const docRef = doc(db, "admins", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setCurrentUserProfile(docSnap.data());
-          setIsSuperAdmin(docSnap.data().role === "super_admin" || user.email === "carmechstechlabs@gmail.com");
-        } else if (user.email === "carmechstechlabs@gmail.com") {
-          await setDoc(docRef, {
-            email: user.email,
-            role: "super_admin",
-            locationId: "all",
-            createdAt: serverTimestamp()
-          });
-          setIsSuperAdmin(true);
-          setCurrentUserProfile({ role: "super_admin", locationId: "all" });
-        } else {
+        try {
+          const adminRef = doc(db, "admins", user.uid);
+          const userRef = doc(db, "users", user.uid);
+          const [adminSnap, userSnap] = await Promise.all([getDoc(adminRef), getDoc(userRef)]);
+
+          if (adminSnap.exists()) {
+            const profile = adminSnap.data();
+            setCurrentUserProfile(profile);
+            setIsSuperAdmin(profile.role === "super_admin" || user.email === "carmechstechlabs@gmail.com");
+            return;
+          }
+
+          const userRole = userSnap.exists() ? userSnap.data().role : null;
+          if (userRole === "admin" || userRole === "super_admin") {
+            const profile = {
+              email: user.email,
+              role: userRole,
+              locationId: userSnap.data().locationId || "all",
+              createdAt: serverTimestamp(),
+            };
+            await setDoc(adminRef, profile, { merge: true });
+            setCurrentUserProfile(profile);
+            setIsSuperAdmin(userRole === "super_admin" || user.email === "carmechstechlabs@gmail.com");
+            return;
+          }
+
+          if (user.email === "carmechstechlabs@gmail.com") {
+            await setDoc(adminRef, {
+              email: user.email,
+              role: "super_admin",
+              locationId: "all",
+              createdAt: serverTimestamp()
+            });
+            setIsSuperAdmin(true);
+            setCurrentUserProfile({ role: "super_admin", locationId: "all" });
+            return;
+          }
+
           setIsSuperAdmin(false);
           setCurrentUserProfile(null);
+        } finally {
+          setAdminProfileLoading(false);
         }
       };
       checkAdminDoc();
     } else {
       setIsSuperAdmin(false);
       setCurrentUserProfile(null);
+      setAdminProfileLoading(false);
     }
   }, [user]);
 
@@ -570,6 +597,17 @@ export default function AdminDashboard() {
 
   const handleLogout = () => signOut(auth);
 
+  const { "*": path } = useParams();
+  const portalSlug = path?.startsWith("login/") ? path.split("/")[1] : null;
+  const [portalLoc, setPortalLoc] = useState<any>(null);
+
+  useEffect(() => {
+    if (portalSlug && locations.length > 0) {
+      const found = locations.find(l => l.slug === portalSlug || l.id === portalSlug);
+      if (found) setPortalLoc(found);
+    }
+  }, [portalSlug, locations]);
+
   if (loading) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-neutral-950 text-white">
@@ -585,18 +623,6 @@ export default function AdminDashboard() {
       setActiveTab(tab);
     }
   };
-
-  const { "*": path } = useParams();
-  const portalSlug = path?.startsWith("login/") ? path.split("/")[1] : null;
-
-  const [portalLoc, setPortalLoc] = useState<any>(null);
-
-  useEffect(() => {
-    if (portalSlug && locations.length > 0) {
-      const found = locations.find(l => l.slug === portalSlug || l.id === portalSlug);
-      if (found) setPortalLoc(found);
-    }
-  }, [portalSlug, locations]);
 
   if (!user) {
     return (
@@ -686,6 +712,14 @@ export default function AdminDashboard() {
             Quick Sign-In
           </button>
         </motion.div>
+      </div>
+    );
+  }
+
+  if (adminProfileLoading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-neutral-950 text-white">
+        <Loader2 className="animate-spin text-red-600" size={48} />
       </div>
     );
   }
@@ -8853,4 +8887,3 @@ function SecretsTab() {
     </div>
   );
 }
-
